@@ -1,0 +1,17 @@
+{
+  "name": "details_extraction",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "googleapis": "^160.0.0",
+    "mongodb": "^3.7.4"
+  }
+}
