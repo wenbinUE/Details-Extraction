@@ -234,7 +234,6 @@ MongoClient.connect(
 );
 
 async function sendToGoogleSheet(rows, sheetName) {
-
   // Path to your Google Service Account credentials JSON file
   const credentials = JSON.parse(
     fs.readFileSync(
