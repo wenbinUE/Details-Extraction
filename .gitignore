@@ -1,3 +1,5 @@
 node_modules/
 .qodo
 JSON_key/
+MQL/
+testing.js

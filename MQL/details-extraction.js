@@ -30,6 +30,15 @@ db.courses.find().forEach(function (doc) {
     doc.data.local_year_fulltime = lf;
   }
 
+  // Change university_id from string to ObjectId
+  if (
+    doc.university_id &&
+    typeof doc.university_id === "string" &&
+    doc.university_id.length === 24
+  ) {
+    doc.university_id = ObjectId(doc.university_id);
+  }
+
   // Save changes back to courses
   db.courses.save(doc);
 });
@@ -64,10 +73,20 @@ db.courses.aggregate([
       as: "campus_details",
     },
   },
+  {
+    $lookup: {
+      from: "universities",
+      localField: "university_id",
+      foreignField: "_id",
+      as: "university_details",
+    },
+  },
 
   {
     $group: {
       _id: "$_id",
+      university_id : { $first: "$university_id" },
+      university_name: { $first: { $arrayElemAt: ["$university_details.name", 0] } },
       name: { $first: "$name" },
       reference_url: { $first: "$reference_url" },
       why_apply: { $first: "$data.why_apply" },

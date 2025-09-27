@@ -89,7 +89,7 @@ MongoClient.connect(
         .collection("courses")
         .distinct("university_id", { "data.publish": "on" });
 
-      // Get the list of required universities 
+      // Get the list of required universities
       const universities = await db
         .collection("universities")
         .find(
@@ -234,7 +234,8 @@ MongoClient.connect(
 );
 
 async function sendToGoogleSheet(rows, sheetName) {
-  // Path to your credentials.json file
+
+  // Path to your Google Service Account credentials JSON file
   const credentials = JSON.parse(
     fs.readFileSync(
       path.join(
