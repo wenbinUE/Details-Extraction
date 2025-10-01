@@ -5,8 +5,9 @@ const fs = require("fs");
 const path = require("path");
 const TurndownService = require("turndown");
 const turndownService = new TurndownService();
+require('dotenv').config();
 
-const url = "mongodb://localhost:27017"; // mongoDB connection URL
+const url = process.env.MONGO_URL; // mongoDB connection URL
 const dbName = "production"; // database name
 
 module.exports = async function extractDetails(uniId) {
