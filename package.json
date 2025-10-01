@@ -11,6 +11,8 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
+    "dotenv": "^17.2.3",
+    "express": "^5.1.0",
     "googleapis": "^160.0.0",
     "mongodb": "^3.7.4",
     "turndown": "^7.2.1"
