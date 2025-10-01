@@ -8,212 +8,213 @@ const turndownService = new TurndownService();
 
 const url = "mongodb://localhost:27017"; // mongoDB connection URL
 const dbName = "production"; // database name
-const uniId = ObjectId("5a3a79cd2a2e3c51d02ccbd5");
 
-MongoClient.connect(
-  url,
-  { useNewUrlParser: true, useUnifiedTopology: true },
-  async (err, client) => {
-    if (err) {
-      console.error("Connection error:", err);
-      return;
-    }
-
-    console.log("Connected successfully to MongoDB");
-    const db = client.db(dbName);
-    const coursesCol = db.collection("courses");
-
-    try {
-      // code cleaning here
-      const cursor = coursesCol.find();
-      while (await cursor.hasNext()) {
-        const doc = await cursor.next();
-
-        let changed = false;
-
-        // Convert level_of_studies array strings to ObjectId
-        if (doc.data && Array.isArray(doc.data.level_of_studies)) {
-          doc.data.level_of_studies = doc.data.level_of_studies.map(function (
-            lvl
-          ) {
-            if (typeof lvl === "string" && lvl.length === 24)
-              return ObjectId(lvl);
-            changed = true;
-            return lvl;
-          });
-        }
-
-        // Convert campus_id string to ObjectId
-        if (
-          doc.campus_id &&
-          typeof doc.campus_id === "string" &&
-          doc.campus_id.length === 24
-        ) {
-          doc.campus_id = ObjectId(doc.campus_id);
-          changed = true;
-        }
-
-        // Convert partner_duration to float
-        if (doc.data) {
-          let pd = parseFloat(doc.data.partner_duration);
-          if (isNaN(pd)) pd = 0;
-          if (doc.data.partner_duration !== pd) {
-            doc.data.partner_duration = pd;
-            changed = true;
-          }
-
-          // Convert local_year_fulltime to float
-          let lf = parseFloat(doc.data.local_year_fulltime);
-          if (isNaN(lf)) lf = 0;
-          if (doc.data.local_year_fulltime !== lf) {
-            doc.data.local_year_fulltime = lf;
-            changed = true;
-          }
-        }
-
-        // Change university_id from string to ObjectId
-        if (
-          doc.university_id &&
-          typeof doc.university_id === "string" &&
-          doc.university_id.length === 24
-        ) {
-          doc.university_id = ObjectId(doc.university_id);
-          changed = true;
-        }
-
-        // If any changes were made, save the document back
-        if (changed) {
-          await coursesCol.replaceOne({ _id: doc._id }, doc);
-        }
+module.exports = async function extractDetails(uniId) {
+  MongoClient.connect(
+    url,
+    { useNewUrlParser: true, useUnifiedTopology: true },
+    async (err, client) => {
+      if (err) {
+        console.error("Connection error:", err);
+        return;
       }
 
-      // aggregation code here
-      const result = await db
-        .collection("courses")
-        .aggregate([
-          { $match: { university_id: uniId } }, // matched university
-          { $match: { "data.publish": "on" } }, // only published courses
+      console.log("Connected successfully to MongoDB");
+      const db = client.db(dbName);
+      const coursesCol = db.collection("courses");
 
-          { $unwind: { path: "$data", preserveNullAndEmptyArrays: true } }, // open the data dictionary
-          {
-            $unwind: {
-              path: "$data.english_requirement", // open english_requirement array
-              preserveNullAndEmptyArrays: true,
-            },
-          },
+      try {
+        // code cleaning here
+        const cursor = coursesCol.find();
+        while (await cursor.hasNext()) {
+          const doc = await cursor.next();
 
-          {
-            $lookup: {
-              from: "levelofstudies",
-              localField: "data.level_of_studies", // join levelofstudies collection
-              foreignField: "_id",
-              as: "level_details",
-            },
-          },
-          {
-            $lookup: {
-              from: "campuses",
-              localField: "campus_id", // join campuses collection
-              foreignField: "_id",
-              as: "campus_details",
-            },
-          },
-          {
-            $lookup: {
-              from: "universities",
-              localField: "university_id", // join universities collection
-              foreignField: "_id",
-              as: "university_details",
-            },
-          },
-          {
-            $group: {
-              _id: "$_id",
-              name: { $first: "$name" },
-              reference_url: { $first: "$reference_url" },
-              why_apply: { $first: "$data.why_apply" },
-              course_level: {
-                $first: { $arrayElemAt: ["$level_details.name", 0] },
+          let changed = false;
+
+          // Convert level_of_studies array strings to ObjectId
+          if (doc.data && Array.isArray(doc.data.level_of_studies)) {
+            doc.data.level_of_studies = doc.data.level_of_studies.map(function (
+              lvl
+            ) {
+              if (typeof lvl === "string" && lvl.length === 24)
+                return ObjectId(lvl);
+              changed = true;
+              return lvl;
+            });
+          }
+
+          // Convert campus_id string to ObjectId
+          if (
+            doc.campus_id &&
+            typeof doc.campus_id === "string" &&
+            doc.campus_id.length === 24
+          ) {
+            doc.campus_id = ObjectId(doc.campus_id);
+            changed = true;
+          }
+
+          // Convert partner_duration to float
+          if (doc.data) {
+            let pd = parseFloat(doc.data.partner_duration);
+            if (isNaN(pd)) pd = 0;
+            if (doc.data.partner_duration !== pd) {
+              doc.data.partner_duration = pd;
+              changed = true;
+            }
+
+            // Convert local_year_fulltime to float
+            let lf = parseFloat(doc.data.local_year_fulltime);
+            if (isNaN(lf)) lf = 0;
+            if (doc.data.local_year_fulltime !== lf) {
+              doc.data.local_year_fulltime = lf;
+              changed = true;
+            }
+          }
+
+          // Change university_id from string to ObjectId
+          if (
+            doc.university_id &&
+            typeof doc.university_id === "string" &&
+            doc.university_id.length === 24
+          ) {
+            doc.university_id = ObjectId(doc.university_id);
+            changed = true;
+          }
+
+          // If any changes were made, save the document back
+          if (changed) {
+            await coursesCol.replaceOne({ _id: doc._id }, doc);
+          }
+        }
+
+        // aggregation code here
+        const result = await db
+          .collection("courses")
+          .aggregate([
+            { $match: { university_id: uniId } }, // matched university
+            { $match: { "data.publish": "on" } }, // only published courses
+
+            { $unwind: { path: "$data", preserveNullAndEmptyArrays: true } }, // open the data dictionary
+            {
+              $unwind: {
+                path: "$data.english_requirement", // open english_requirement array
+                preserveNullAndEmptyArrays: true,
               },
-              campus_name: {
-                $first: { $arrayElemAt: ["$campus_details.name", 0] },
+            },
+
+            {
+              $lookup: {
+                from: "levelofstudies",
+                localField: "data.level_of_studies", // join levelofstudies collection
+                foreignField: "_id",
+                as: "level_details",
               },
-              duration: {
-                $first: {
-                  $add: [
-                    { $ifNull: ["$data.partner_duration", 0] },
-                    { $ifNull: ["$data.local_year_fulltime", 0] },
-                  ],
+            },
+            {
+              $lookup: {
+                from: "campuses",
+                localField: "campus_id", // join campuses collection
+                foreignField: "_id",
+                as: "campus_details",
+              },
+            },
+            {
+              $lookup: {
+                from: "universities",
+                localField: "university_id", // join universities collection
+                foreignField: "_id",
+                as: "university_details",
+              },
+            },
+            {
+              $group: {
+                _id: "$_id",
+                name: { $first: "$name" },
+                reference_url: { $first: "$reference_url" },
+                why_apply: { $first: "$data.why_apply" },
+                course_level: {
+                  $first: { $arrayElemAt: ["$level_details.name", 0] },
                 },
-              },
-              intakes: {
-                $first: {
-                  $reduce: {
-                    input: "$data.intakes",
-                    initialValue: "",
-                    in: {
-                      $concat: [
-                        "$$value",
-                        { $cond: [{ $eq: ["$$value", ""] }, "", ", "] },
-                        "$$this",
-                      ],
+                campus_name: {
+                  $first: { $arrayElemAt: ["$campus_details.name", 0] },
+                },
+                duration: {
+                  $first: {
+                    $add: [
+                      { $ifNull: ["$data.partner_duration", 0] },
+                      { $ifNull: ["$data.local_year_fulltime", 0] },
+                    ],
+                  },
+                },
+                intakes: {
+                  $first: {
+                    $reduce: {
+                      input: "$data.intakes",
+                      initialValue: "",
+                      in: {
+                        $concat: [
+                          "$$value",
+                          { $cond: [{ $eq: ["$$value", ""] }, "", ", "] },
+                          "$$this",
+                        ],
+                      },
                     },
                   },
                 },
-              },
-              ptptn_type: { $first: "$data.ptptn_type" },
-              english_requirements: {
-                $push: {
-                  type: "$data.english_requirement.type",
-                  requirement: "$data.english_requirement.requirement",
+                ptptn_type: { $first: "$data.ptptn_type" },
+                english_requirements: {
+                  $push: {
+                    type: "$data.english_requirement.type",
+                    requirement: "$data.english_requirement.requirement",
+                  },
                 },
               },
             },
-          },
-        ])
-        .toArray();
+          ])
+          .toArray();
 
-      //   console.log("Aggregation result:", result);
-      console.log(JSON.stringify(result, null, 2));
+        //   console.log("Aggregation result:", result);
+        console.log(JSON.stringify(result, null, 2));
 
-      const flattened = result.map((doc, idx) => {
-        const markedDownWhy_Apply = doc.why_apply
-          ? turndownService.turndown(doc.why_apply)
-          : ""; // Convert why_apply to markdown format
+        const flattened = result.map((doc, idx) => {
+          const markedDownWhy_Apply = doc.why_apply
+            ? turndownService.turndown(doc.why_apply)
+            : ""; // Convert why_apply to markdown format
 
-        const row = [
-          doc._id, // Course ID
-          doc.name, // Name
-          doc.reference_url, // Reference URL
-          markedDownWhy_Apply, // Why Apply (HTML)
-          doc.course_level, // Course Level
-          doc.campus_name, // Campus (Default)
-          doc.duration, // Local Duration (Year) + Partner University Duration
-          doc.duration, // Local Duration (Year) + Partner University.Duration (duplicate?)
-          doc.intakes, // Intakes
-          doc.ptptn_type, // PTPTN Type
-        ];
+          const row = [
+            doc._id, // Course ID
+            doc.name, // Name
+            doc.reference_url, // Reference URL
+            markedDownWhy_Apply, // Why Apply (HTML)
+            doc.course_level, // Course Level
+            doc.campus_name, // Campus (Default)
+            doc.duration, // Local Duration (Year) + Partner University Duration
+            doc.duration, // Local Duration (Year) + Partner University.Duration (duplicate?)
+            doc.intakes, // Intakes
+            doc.ptptn_type, // PTPTN Type
+          ];
 
-        // English Exam Type & Requirement (1 to 9)
+          // English Exam Type & Requirement (1 to 9)
 
-        // Fill up to 9 exam types
-        for (let i = 0; i < 9; i++) {
-          row.push(doc.english_requirements[i]?.type || "");
-          row.push(doc.english_requirements[i]?.requirement || "");
-        }
+          // Fill up to 9 exam types
+          for (let i = 0; i < 9; i++) {
+            row.push(doc.english_requirements[i]?.type || "");
+            row.push(doc.english_requirements[i]?.requirement || "");
+          }
 
-        return row;
-      });
+          return row;
+        });
 
-      // now send `flattened` to Google Sheets
-      await sendToGoogleSheet(flattened, "Details-Extraction");
-    } catch (aggErr) {
-      console.error("Aggregation error:", aggErr);
-    } finally {
-      client.close();
+        // now send `flattened` to Google Sheets
+        await sendToGoogleSheet(flattened, "Details-Extraction");
+      } catch (aggErr) {
+        console.error("Aggregation error:", aggErr);
+      } finally {
+        client.close();
+      }
     }
-  }
-);
+  );
+}
 
 async function sendToGoogleSheet(rows, sheetName) {
   // Path to your Google Service Account credentials JSON file
