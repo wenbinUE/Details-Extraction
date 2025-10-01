@@ -12,6 +12,7 @@
   "type": "commonjs",
   "dependencies": {
     "googleapis": "^160.0.0",
-    "mongodb": "^3.7.4"
+    "mongodb": "^3.7.4",
+    "turndown": "^7.2.1"
   }
 }

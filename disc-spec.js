@@ -1,0 +1,237 @@
+const { MongoClient } = require("mongodb");
+const { google } = require("googleapis");
+const { ObjectId } = require("mongodb");
+const fs = require("fs");
+const path = require("path");
+const TurndownService = require("turndown");
+const turndownService = new TurndownService();
+
+const url = "mongodb://localhost:27017"; // mongoDB connection URL
+const dbName = "production"; // database name
+const uniId = ObjectId("5a3a79cd2a2e3c51d02ccbd5");
+
+MongoClient.connect(
+  url,
+  { useNewUrlParser: true, useUnifiedTopology: true },
+  async (err, client) => {
+    if (err) {
+      console.error("Connection error:", err);
+      return;
+    }
+
+    console.log("Connected successfully to MongoDB");
+    const db = client.db(dbName);
+    const coursesCol = db.collection("courses");
+
+    try {
+      // code cleaning here
+      const cursor = coursesCol.find();
+      while (await cursor.hasNext()) {
+        const doc = await cursor.next();
+
+        let changed = false;
+
+        // Changes discipline id from string to ObjectId
+        if (
+          doc.discipline &&
+          typeof doc.discipline === "string" &&
+          doc.discipline.length === 24
+        ) {
+          doc.discipline = ObjectId(doc.discipline);
+          changed = true;
+        }
+
+        // Changes specialisations array id from string to ObjectId
+        if (doc.specialisations && Array.isArray(doc.specialisations)) {
+          doc.specialisations = doc.specialisations.map(function (special) {
+            if (typeof special === "string" && special.length === 24)
+              return ObjectId(special);
+            changed = true;
+            return special;
+          });
+        }
+
+        if (changed) {
+          await coursesCol.replaceOne({ _id: doc._id }, doc);
+        }
+      }
+
+      console.log("done");
+
+      const result = await db
+        .collection("courses")
+        .aggregate([
+          { $match: { university_id: uniId } }, // matched university
+          { $match: { "data.publish": "on" } }, // only published courses
+
+          // open specialisations array
+          {
+            $unwind: {
+              path: "$specialisations",
+              preserveNullAndEmptyArrays: true,
+            },
+          },
+
+          // group with disciplines collection to get discipline names
+          {
+            $lookup: {
+              from: "disciplines",
+              localField: "discipline",
+              foreignField: "_id",
+              as: "discipline_details",
+            },
+          },
+          {
+            $lookup: {
+              from: "specialisations",
+              localField: "specialisations", // join specialisations collection
+              foreignField: "_id",
+              as: "specialisations_details",
+            },
+          },
+
+          {
+            $group: {
+              _id: "$_id",
+              name: { $first: "$name" },
+              major_map: {
+                $push: {
+                  discipline: "$discipline_details.name",
+                  specialisation: "$specialisations_details.name",
+                },
+              },
+            },
+          },
+        ])
+        .toArray();
+
+      console.log(JSON.stringify(result, null, 2));
+
+      const flattened = [];
+
+      result.forEach((doc) => {
+        for (let i = 0; i < doc.major_map.length; i++) {
+          const discipline = Array.isArray(doc.major_map[i]?.discipline)
+            ? doc.major_map[i].discipline.join(", ")
+            : doc.major_map[i]?.discipline || "";
+
+          const specialisation = Array.isArray(doc.major_map[i]?.specialisation)
+            ? doc.major_map[i].specialisation.join(", ")
+            : doc.major_map[i]?.specialisation || "";
+
+          flattened.push([
+            doc._id || "",
+            doc.name || "",
+            discipline,
+            specialisation,
+          ]);
+        }
+      });
+
+      // console.log(flattened);
+
+      await sendToGoogleSheet(flattened, "Disc-Spec-Extraction");
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+    } catch (aggErr) {
+      console.error("Aggregation error:", aggErr);
+    } finally {
+      client.close();
+    }
+  }
+);
+
+async function sendToGoogleSheet(rows, sheetName) {
+  // Path to your Google Service Account credentials JSON file
+  const credentials = JSON.parse(
+    fs.readFileSync(
+      path.join(
+        "C:",
+        "Uni_Enrol_Intern",
+        "ETL_Project",
+        "Details_Extraction",
+        "JSON_key",
+        "mongouedetailsextration-2b7519da48c4.json"
+      ),
+      "utf8"
+    )
+  );
+
+  const auth = new google.auth.JWT({
+    email: credentials.client_email,
+    key: credentials.private_key,
+    scopes: ["https://www.googleapis.com/auth/spreadsheets"],
+  });
+
+  // Authorize once
+  await auth.authorize();
+
+  const headers = ["Course ID", "Course Name", "Major Name", "Major Type"];
+
+  const allRows = [headers, ...rows];
+
+  const sheets = google.sheets({ version: "v4", auth });
+  const spreadsheetId = "1CeeOcN8B2B2qj6oTVu2yYQPP5YFt7QXxeBdOoNFIhKw"; // from your Google Sheet URL
+  const range = `'Disc-Spec-Extraction'!A1`; // starting cell
+
+  // Optionally create the sheet if it doesn't exist
+  try {
+    await sheets.spreadsheets.batchUpdate({
+      spreadsheetId,
+      resource: {
+        requests: [
+          {
+            addSheet: {
+              properties: { title: sheetName },
+            },
+          },
+        ],
+      },
+    });
+  } catch (e) {
+    // Ignore error if sheet already exists
+  }
+
+  // Clear the sheet before writing
+  await sheets.spreadsheets.values.clear({ spreadsheetId, range });
+
+  // Write headers + data
+  await sheets.spreadsheets.values.update({
+    spreadsheetId,
+    range,
+    valueInputOption: "RAW",
+    resource: { values: allRows },
+  });
+
+  // Bold the header row (row 1)
+  await sheets.spreadsheets.batchUpdate({
+    spreadsheetId,
+    resource: {
+      requests: [
+        {
+          repeatCell: {
+            range: {
+              sheetId: await getSheetId(sheets, spreadsheetId, sheetName),
+              startRowIndex: 0,
+              endRowIndex: 1,
+            },
+            cell: {
+              userEnteredFormat: {
+                textFormat: { bold: true },
+              },
+            },
+            fields: "userEnteredFormat.textFormat.bold",
+          },
+        },
+      ],
+    },
+  });
+
+  // Helper to get sheetId by name
+  async function getSheetId(sheets, spreadsheetId, sheetName) {
+    const res = await sheets.spreadsheets.get({ spreadsheetId });
+    const sheet = res.data.sheets.find((s) => s.properties.title === sheetName);
+    return sheet.properties.sheetId;
+  }
+
+  console.log(`Data pushed to Google Sheet: ${sheetName}`);
+}

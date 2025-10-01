@@ -3,9 +3,12 @@ const { google } = require("googleapis");
 const { ObjectId } = require("mongodb");
 const fs = require("fs");
 const path = require("path");
+const TurndownService = require("turndown");
+const turndownService = new TurndownService();
 
 const url = "mongodb://localhost:27017"; // mongoDB connection URL
 const dbName = "production"; // database name
+const uniId = ObjectId("5a3a79cd2a2e3c51d02ccbd5");
 
 MongoClient.connect(
   url,
@@ -35,9 +38,9 @@ MongoClient.connect(
           ) {
             if (typeof lvl === "string" && lvl.length === 24)
               return ObjectId(lvl);
+            changed = true;
             return lvl;
           });
-          changed = true;
         }
 
         // Convert campus_id string to ObjectId
@@ -84,147 +87,126 @@ MongoClient.connect(
         }
       }
 
-      // Get the university IDs which their courses need to be published
-      const publishedUniIds = await db
-        .collection("courses")
-        .distinct("university_id", { "data.publish": "on" });
-
-      // Get the list of required universities
-      const universities = await db
-        .collection("universities")
-        .find(
-          { _id: { $in: publishedUniIds } },
-          { projection: { _id: 1, name: 1 } }
-        )
-        .limit(5) // limit to 5 uni for testing
-        .toArray();
-
       // aggregation code here
-      for (const uni of universities) {
-        const result = await db
-          .collection("courses")
-          .aggregate([
-            { $match: { university_id: uni._id } }, // matched university
-            { $match: { "data.publish": "on" } }, // only published courses
+      const result = await db
+        .collection("courses")
+        .aggregate([
+          { $match: { university_id: uniId } }, // matched university
+          { $match: { "data.publish": "on" } }, // only published courses
 
-            { $unwind: { path: "$data", preserveNullAndEmptyArrays: true } }, // open the data dictionary
-            {
-              $unwind: {
-                path: "$data.english_requirement", // open english_requirement array
-                preserveNullAndEmptyArrays: true,
-              },
+          { $unwind: { path: "$data", preserveNullAndEmptyArrays: true } }, // open the data dictionary
+          {
+            $unwind: {
+              path: "$data.english_requirement", // open english_requirement array
+              preserveNullAndEmptyArrays: true,
             },
+          },
 
-            {
-              $lookup: {
-                from: "levelofstudies",
-                localField: "data.level_of_studies", // join levelofstudies collection
-                foreignField: "_id",
-                as: "level_details",
-              },
+          {
+            $lookup: {
+              from: "levelofstudies",
+              localField: "data.level_of_studies", // join levelofstudies collection
+              foreignField: "_id",
+              as: "level_details",
             },
-            {
-              $lookup: {
-                from: "campuses",
-                localField: "campus_id", // join campuses collection
-                foreignField: "_id",
-                as: "campus_details",
-              },
+          },
+          {
+            $lookup: {
+              from: "campuses",
+              localField: "campus_id", // join campuses collection
+              foreignField: "_id",
+              as: "campus_details",
             },
-            {
-              $lookup: {
-                from: "universities",
-                localField: "university_id", // join universities collection
-                foreignField: "_id",
-                as: "university_details",
-              },
+          },
+          {
+            $lookup: {
+              from: "universities",
+              localField: "university_id", // join universities collection
+              foreignField: "_id",
+              as: "university_details",
             },
-            {
-              $group: {
-                _id: "$_id",
-                university_id: { $first: "$university_id" },
-                university_name: {
-                  $first: { $arrayElemAt: ["$university_details.name", 0] },
+          },
+          {
+            $group: {
+              _id: "$_id",
+              name: { $first: "$name" },
+              reference_url: { $first: "$reference_url" },
+              why_apply: { $first: "$data.why_apply" },
+              course_level: {
+                $first: { $arrayElemAt: ["$level_details.name", 0] },
+              },
+              campus_name: {
+                $first: { $arrayElemAt: ["$campus_details.name", 0] },
+              },
+              duration: {
+                $first: {
+                  $add: [
+                    { $ifNull: ["$data.partner_duration", 0] },
+                    { $ifNull: ["$data.local_year_fulltime", 0] },
+                  ],
                 },
-                name: { $first: "$name" },
-                reference_url: { $first: "$reference_url" },
-                why_apply: { $first: "$data.why_apply" },
-                course_level: {
-                  $first: { $arrayElemAt: ["$level_details.name", 0] },
-                },
-                campus_name: {
-                  $first: { $arrayElemAt: ["$campus_details.name", 0] },
-                },
-                duration: {
-                  $first: {
-                    $add: [
-                      { $ifNull: ["$data.partner_duration", 0] },
-                      { $ifNull: ["$data.local_year_fulltime", 0] },
-                    ],
-                  },
-                },
-                intakes: {
-                  $first: {
-                    $reduce: {
-                      input: "$data.intakes",
-                      initialValue: "",
-                      in: {
-                        $concat: [
-                          "$$value",
-                          { $cond: [{ $eq: ["$$value", ""] }, "", ", "] },
-                          "$$this",
-                        ],
-                      },
+              },
+              intakes: {
+                $first: {
+                  $reduce: {
+                    input: "$data.intakes",
+                    initialValue: "",
+                    in: {
+                      $concat: [
+                        "$$value",
+                        { $cond: [{ $eq: ["$$value", ""] }, "", ", "] },
+                        "$$this",
+                      ],
                     },
                   },
                 },
-                ptptn_type: { $first: "$data.ptptn_type" },
-                english_requirements: {
-                  $push: {
-                    type: "$data.english_requirement.type",
-                    requirement: "$data.english_requirement.requirement",
-                  },
+              },
+              ptptn_type: { $first: "$data.ptptn_type" },
+              english_requirements: {
+                $push: {
+                  type: "$data.english_requirement.type",
+                  requirement: "$data.english_requirement.requirement",
                 },
               },
             },
-          ])
-          .toArray();
+          },
+        ])
+        .toArray();
 
-        //   console.log("Aggregation result:", result);
-        console.log(JSON.stringify(result, null, 2));
-        // here you can send `result` to Google Sheets, etc.
+      //   console.log("Aggregation result:", result);
+      console.log(JSON.stringify(result, null, 2));
 
-        const flattened = result.map((doc, idx) => {
-          const row = [
-            idx === 0 ? doc.university_id : "", // University ID
-            idx === 0 ? doc.university_name : "", // University Name
-            doc._id, // Course ID
-            doc.name, // Name
-            doc.reference_url, // Reference URL
-            doc.why_apply, // Why Apply (HTML)
-            doc.course_level, // Course Level
-            doc.campus_name, // Campus (Default)
-            doc.duration, // Local Duration (Year) + Partner University Duration
-            doc.duration, // Local Duration (Year) + Partner University.Duration (duplicate?)
-            doc.intakes, // Intakes
-            doc.ptptn_type, // PTPTN Type
-          ];
+      const flattened = result.map((doc, idx) => {
+        const markedDownWhy_Apply = doc.why_apply
+          ? turndownService.turndown(doc.why_apply)
+          : ""; // Convert why_apply to markdown format
 
-          // English Exam Type & Requirement (1 to 9)
+        const row = [
+          doc._id, // Course ID
+          doc.name, // Name
+          doc.reference_url, // Reference URL
+          markedDownWhy_Apply, // Why Apply (HTML)
+          doc.course_level, // Course Level
+          doc.campus_name, // Campus (Default)
+          doc.duration, // Local Duration (Year) + Partner University Duration
+          doc.duration, // Local Duration (Year) + Partner University.Duration (duplicate?)
+          doc.intakes, // Intakes
+          doc.ptptn_type, // PTPTN Type
+        ];
 
-          // Fill up to 9 exam types
-          for (let i = 0; i < 9; i++) {
-            row.push(doc.english_requirements[i]?.type || "");
-            row.push(doc.english_requirements[i]?.requirement || "");
-          }
+        // English Exam Type & Requirement (1 to 9)
 
-          return row;
-        });
+        // Fill up to 9 exam types
+        for (let i = 0; i < 9; i++) {
+          row.push(doc.english_requirements[i]?.type || "");
+          row.push(doc.english_requirements[i]?.requirement || "");
+        }
 
-        // now send `flattened` to Google Sheets
-        await sendToGoogleSheet(flattened, uni.name);
-        await new Promise((resolve) => setTimeout(resolve, 2000));
-      }
+        return row;
+      });
+
+      // now send `flattened` to Google Sheets
+      await sendToGoogleSheet(flattened, "Details-Extraction");
     } catch (aggErr) {
       console.error("Aggregation error:", aggErr);
     } finally {
@@ -259,10 +241,8 @@ async function sendToGoogleSheet(rows, sheetName) {
   await auth.authorize();
 
   const headers = [
-    "University ID",
-    "University Name",
     "Course ID",
-    "Name",
+    "Course Name",
     "Reference URL",
     "Why Apply (HTML)",
     "Course Level",
@@ -295,7 +275,7 @@ async function sendToGoogleSheet(rows, sheetName) {
 
   const sheets = google.sheets({ version: "v4", auth });
   const spreadsheetId = "1CeeOcN8B2B2qj6oTVu2yYQPP5YFt7QXxeBdOoNFIhKw"; // from your Google Sheet URL
-  const range = `'${sheetName}'!A1:AD`; // starting cell
+  const range = `'${sheetName}'!A1`; // starting cell
 
   // Optionally create the sheet if it doesn't exist
   try {
