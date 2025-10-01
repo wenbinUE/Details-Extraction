@@ -1,4 +1,12 @@
-## details-extraction.js
-- main program to extract the details and insert into Google Sheets
+## How to setup
 - run npm install googleapis mongodb
-- run node details-extraction
+- run npm install turndown
+
+## details-extraction.js
+- Course details for uni
+
+## entry-requirement.js
+- Entry requirements for uni
+
+## disc-spec.js
+- Discipline and specialisation mapping for uni
