@@ -6,7 +6,7 @@ const path = require("path");
 const TurndownService = require("turndown");
 const turndownService = new TurndownService();
 
-const url = "mongodb://localhost:27017"; // mongoDB connection URL
+const url = process.env.MONGO_URL; // mongoDB connection URL
 const dbName = "production"; // database name
 
 
@@ -112,8 +112,8 @@ module.exports = async function extractDetails(uniId) {
             let markedDown_additional_requirement = doc.qualifications[i]
               ?.additional_requirement
               ? turndownService.turndown(
-                  doc.qualifications[i].additional_requirement
-                )
+                doc.qualifications[i].additional_requirement
+              )
               : "";
             flattened.push([
               doc._id || "",
@@ -127,7 +127,7 @@ module.exports = async function extractDetails(uniId) {
           }
         });
 
-      //   console.log(flattened);
+        //   console.log(flattened);
 
         await sendToGoogleSheet(flattened, "ER-Extraction");
       } catch (aggErr) {
