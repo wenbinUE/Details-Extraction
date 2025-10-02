@@ -1,6 +1,9 @@
 ## How to setup
 - run npm install googleapis mongodb turndown express
 
+## server.js
+- main program to run below 3 files
+
 ## details-extraction.js
 - Course details for uni
 
