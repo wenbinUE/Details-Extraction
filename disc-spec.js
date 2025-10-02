@@ -8,137 +8,139 @@ const turndownService = new TurndownService();
 
 const url = "mongodb://localhost:27017"; // mongoDB connection URL
 const dbName = "production"; // database name
-const uniId = ObjectId("5a3a79cd2a2e3c51d02ccbd5");
 
-MongoClient.connect(
-  url,
-  { useNewUrlParser: true, useUnifiedTopology: true },
-  async (err, client) => {
-    if (err) {
-      console.error("Connection error:", err);
-      return;
-    }
-
-    console.log("Connected successfully to MongoDB");
-    const db = client.db(dbName);
-    const coursesCol = db.collection("courses");
-
-    try {
-      // code cleaning here
-      const cursor = coursesCol.find();
-      while (await cursor.hasNext()) {
-        const doc = await cursor.next();
-
-        let changed = false;
-
-        // Changes discipline id from string to ObjectId
-        if (
-          doc.discipline &&
-          typeof doc.discipline === "string" &&
-          doc.discipline.length === 24
-        ) {
-          doc.discipline = ObjectId(doc.discipline);
-          changed = true;
-        }
-
-        // Changes specialisations array id from string to ObjectId
-        if (doc.specialisations && Array.isArray(doc.specialisations)) {
-          doc.specialisations = doc.specialisations.map(function (special) {
-            if (typeof special === "string" && special.length === 24)
-              return ObjectId(special);
-            changed = true;
-            return special;
-          });
-        }
-
-        if (changed) {
-          await coursesCol.replaceOne({ _id: doc._id }, doc);
-        }
+module.exports = async function extractDetails(uniId) {
+  MongoClient.connect(
+    url,
+    { useNewUrlParser: true, useUnifiedTopology: true },
+    async (err, client) => {
+      if (err) {
+        console.error("Connection error:", err);
+        return;
       }
 
-      console.log("done");
+      console.log("Disc-Spec now using uni id: (" + uniId + ")");
+      console.log("Connected successfully to MongoDB (Disc-Spec)");
+      const db = client.db(dbName);
+      const coursesCol = db.collection("courses");
 
-      const result = await db
-        .collection("courses")
-        .aggregate([
-          { $match: { university_id: uniId } }, // matched university
-          { $match: { "data.publish": "on" } }, // only published courses
+      try {
+        // code cleaning here
+        const cursor = coursesCol.find();
+        while (await cursor.hasNext()) {
+          const doc = await cursor.next();
 
-          // open specialisations array
-          {
-            $unwind: {
-              path: "$specialisations",
-              preserveNullAndEmptyArrays: true,
+          let changed = false;
+
+          // Changes discipline id from string to ObjectId
+          if (
+            doc.discipline &&
+            typeof doc.discipline === "string" &&
+            doc.discipline.length === 24
+          ) {
+            doc.discipline = ObjectId(doc.discipline);
+            changed = true;
+          }
+
+          // Changes specialisations array id from string to ObjectId
+          if (doc.specialisations && Array.isArray(doc.specialisations)) {
+            doc.specialisations = doc.specialisations.map(function (special) {
+              if (typeof special === "string" && special.length === 24)
+                return ObjectId(special);
+              changed = true;
+              return special;
+            });
+          }
+
+          if (changed) {
+            await coursesCol.replaceOne({ _id: doc._id }, doc);
+          }
+        }
+
+        console.log("done");
+
+        const result = await db
+          .collection("courses")
+          .aggregate([
+            { $match: { university_id: ObjectId(uniId) } }, // matched university
+            { $match: { "data.publish": "on" } }, // only published courses
+
+            // open specialisations array
+            {
+              $unwind: {
+                path: "$specialisations",
+                preserveNullAndEmptyArrays: true,
+              },
             },
-          },
 
-          // group with disciplines collection to get discipline names
-          {
-            $lookup: {
-              from: "disciplines",
-              localField: "discipline",
-              foreignField: "_id",
-              as: "discipline_details",
+            // group with disciplines collection to get discipline names
+            {
+              $lookup: {
+                from: "disciplines",
+                localField: "discipline",
+                foreignField: "_id",
+                as: "discipline_details",
+              },
             },
-          },
-          {
-            $lookup: {
-              from: "specialisations",
-              localField: "specialisations", // join specialisations collection
-              foreignField: "_id",
-              as: "specialisations_details",
+            {
+              $lookup: {
+                from: "specialisations",
+                localField: "specialisations", // join specialisations collection
+                foreignField: "_id",
+                as: "specialisations_details",
+              },
             },
-          },
 
-          {
-            $group: {
-              _id: "$_id",
-              name: { $first: "$name" },
-              major_map: {
-                $push: {
-                  discipline: "$discipline_details.name",
-                  specialisation: "$specialisations_details.name",
+            {
+              $group: {
+                _id: "$_id",
+                name: { $first: "$name" },
+                major_map: {
+                  $push: {
+                    discipline: "$discipline_details.name",
+                    specialisation: "$specialisations_details.name",
+                  },
                 },
               },
             },
-          },
-        ])
-        .toArray();
+          ])
+          .toArray();
 
-      console.log(JSON.stringify(result, null, 2));
+        console.log(JSON.stringify(result, null, 2));
 
-      const flattened = [];
+        const flattened = [];
 
-      result.forEach((doc) => {
-        for (let i = 0; i < doc.major_map.length; i++) {
-          const discipline = Array.isArray(doc.major_map[i]?.discipline)
-            ? doc.major_map[i].discipline.join(", ")
-            : doc.major_map[i]?.discipline || "";
+        result.forEach((doc) => {
+          for (let i = 0; i < doc.major_map.length; i++) {
+            const discipline = Array.isArray(doc.major_map[i]?.discipline)
+              ? doc.major_map[i].discipline.join(", ")
+              : doc.major_map[i]?.discipline || "";
 
-          const specialisation = Array.isArray(doc.major_map[i]?.specialisation)
-            ? doc.major_map[i].specialisation.join(", ")
-            : doc.major_map[i]?.specialisation || "";
+            const specialisation = Array.isArray(doc.major_map[i]?.specialisation)
+              ? doc.major_map[i].specialisation.join(", ")
+              : doc.major_map[i]?.specialisation || "";
 
-          flattened.push([
-            doc._id || "",
-            doc.name || "",
-            discipline,
-            specialisation,
-          ]);
-        }
-      });
+            flattened.push([
+              doc._id || "",
+              doc.name || "",
+              discipline,
+              specialisation,
+            ]);
+          }
+        });
 
-      // console.log(flattened);
+        // console.log(flattened);
 
-      await sendToGoogleSheet(flattened, "Disc-Spec-Extraction");
-      await new Promise((resolve) => setTimeout(resolve, 2000));
-    } catch (aggErr) {
-      console.error("Aggregation error:", aggErr);
-    } finally {
-      client.close();
+        await sendToGoogleSheet(flattened, "Disc-Spec-Extraction");
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+      } catch (aggErr) {
+        console.error("Aggregation error:", aggErr);
+      } finally {
+        client.close();
+      }
     }
-  }
-);
+  );
+};
 
 async function sendToGoogleSheet(rows, sheetName) {
   // Path to your Google Service Account credentials JSON file

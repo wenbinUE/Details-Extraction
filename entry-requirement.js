@@ -8,133 +8,136 @@ const turndownService = new TurndownService();
 
 const url = "mongodb://localhost:27017"; // mongoDB connection URL
 const dbName = "production"; // database name
-const uniId = ObjectId("5a3a79cd2a2e3c51d02ccbd5");
 
-MongoClient.connect(
-  url,
-  { useNewUrlParser: true, useUnifiedTopology: true },
-  async (err, client) => {
-    if (err) {
-      console.error("Connection error:", err);
-      return;
-    }
 
-    console.log("Connected successfully to MongoDB");
-    const db = client.db(dbName);
-    const coursesCol = db.collection("courses");
-
-    try {
-      // code cleaning here
-      const cursor = coursesCol.find();
-      while (await cursor.hasNext()) {
-        const doc = await cursor.next();
-
-        let changed = false;
-
-        // Changes data.entry_requirement.qualification from string to ObjectId
-        if (doc.data && Array.isArray(doc.data.entry_requirement)) {
-          doc.data.entry_requirement = doc.data.entry_requirement.map(function (
-            req
-          ) {
-            if (
-              req.qualification &&
-              typeof req.qualification === "string" &&
-              req.qualification.length === 24
-            ) {
-              req.qualification = ObjectId(req.qualification);
-              changed = true;
-            }
-            return req;
-          });
-        }
-
-        if (changed) {
-          await coursesCol.replaceOne({ _id: doc._id }, doc);
-        }
+module.exports = async function extractDetails(uniId) {
+  MongoClient.connect(
+    url,
+    { useNewUrlParser: true, useUnifiedTopology: true },
+    async (err, client) => {
+      if (err) {
+        console.error("Connection error:", err);
+        return;
       }
 
-      // aggregation code here
-      const result = await db
-        .collection("courses")
-        .aggregate([
-          { $match: { university_id: uniId } }, // matched university
-          { $match: { "data.publish": "on" } }, // only published courses
+      console.log("Entry Requirement now using uni id: (" + uniId + ")");
+      console.log("Connected successfully to MongoDB (Entry Requirement)");
+      const db = client.db(dbName);
+      const coursesCol = db.collection("courses");
 
-          // open data dictionary, and then entry_requirement array
-          { $unwind: { path: "$data", preserveNullAndEmptyArrays: true } },
-          {
-            $unwind: {
-              path: "$data.entry_requirement",
-              preserveNullAndEmptyArrays: true,
+      try {
+        // code cleaning here
+        const cursor = coursesCol.find();
+        while (await cursor.hasNext()) {
+          const doc = await cursor.next();
+
+          let changed = false;
+
+          // Changes data.entry_requirement.qualification from string to ObjectId
+          if (doc.data && Array.isArray(doc.data.entry_requirement)) {
+            doc.data.entry_requirement = doc.data.entry_requirement.map(function (
+              req
+            ) {
+              if (
+                req.qualification &&
+                typeof req.qualification === "string" &&
+                req.qualification.length === 24
+              ) {
+                req.qualification = ObjectId(req.qualification);
+                changed = true;
+              }
+              return req;
+            });
+          }
+
+          if (changed) {
+            await coursesCol.replaceOne({ _id: doc._id }, doc);
+          }
+        }
+
+        // aggregation code here
+        const result = await db
+          .collection("courses")
+          .aggregate([
+            { $match: { university_id: ObjectId(uniId) } }, // matched university
+            { $match: { "data.publish": "on" } }, // only published courses
+
+            // open data dictionary, and then entry_requirement array
+            { $unwind: { path: "$data", preserveNullAndEmptyArrays: true } },
+            {
+              $unwind: {
+                path: "$data.entry_requirement",
+                preserveNullAndEmptyArrays: true,
+              },
             },
-          },
-          // group with subject_qualification collection to get qualification names
-          {
-            $lookup: {
-              from: "subject_qualifications",
-              localField: "data.entry_requirement.qualification",
-              foreignField: "_id",
-              as: "qualification_details",
+            // group with subject_qualification collection to get qualification names
+            {
+              $lookup: {
+                from: "subject_qualifications",
+                localField: "data.entry_requirement.qualification",
+                foreignField: "_id",
+                as: "qualification_details",
+              },
             },
-          },
-          {
-            $group: {
-              _id: "$_id",
-              name: { $first: "$name" },
-              qualifications: {
-                $push: {
-                  qualification_type: "$qualification_details.name",
-                  requirement_summary:
-                    "$data.entry_requirement.requirement_summary",
-                  score_to_qualify: "$data.entry_requirement.score",
-                  remarks: "$data.entry_requirement.remarks",
-                  additional_requirement:
-                    "$data.entry_requirement.additional_requirement",
+            {
+              $group: {
+                _id: "$_id",
+                name: { $first: "$name" },
+                qualifications: {
+                  $push: {
+                    qualification_type: "$qualification_details.name",
+                    requirement_summary:
+                      "$data.entry_requirement.requirement_summary",
+                    score_to_qualify: "$data.entry_requirement.score",
+                    remarks: "$data.entry_requirement.remarks",
+                    additional_requirement:
+                      "$data.entry_requirement.additional_requirement",
+                  },
                 },
               },
             },
-          },
-        ])
-        .toArray();
+          ])
+          .toArray();
 
-      console.log(JSON.stringify(result, null, 2));
+        console.log(JSON.stringify(result, null, 2));
 
-      const flattened = [];
+        const flattened = [];
 
-      result.forEach((doc) => {
-        for (let i = 0; i < doc.qualifications.length; i++) {
-          let qualificationType = doc.qualifications[i]?.qualification_type;
-          if (Array.isArray(qualificationType)) {
-            qualificationType = qualificationType.join(", ");
+        result.forEach((doc) => {
+          for (let i = 0; i < doc.qualifications.length; i++) {
+            let qualificationType = doc.qualifications[i]?.qualification_type;
+            if (Array.isArray(qualificationType)) {
+              qualificationType = qualificationType.join(", ");
+            }
+            let markedDown_additional_requirement = doc.qualifications[i]
+              ?.additional_requirement
+              ? turndownService.turndown(
+                  doc.qualifications[i].additional_requirement
+                )
+              : "";
+            flattened.push([
+              doc._id || "",
+              doc.name || "",
+              qualificationType || "",
+              doc.qualifications[i]?.requirement_summary || "",
+              doc.qualifications[i]?.score_to_qualify || "",
+              doc.qualifications[i]?.remarks || "",
+              markedDown_additional_requirement,
+            ]);
           }
-          let markedDown_additional_requirement = doc.qualifications[i]
-            ?.additional_requirement
-            ? turndownService.turndown(
-                doc.qualifications[i].additional_requirement
-              )
-            : "";
-          flattened.push([
-            doc._id || "",
-            doc.name || "",
-            qualificationType || "",
-            doc.qualifications[i]?.requirement_summary || "",
-            doc.qualifications[i]?.score_to_qualify || "",
-            doc.qualifications[i]?.remarks || "",
-            markedDown_additional_requirement,
-          ]);
-        }
-      });
+        });
 
-    //   console.log(flattened);
+      //   console.log(flattened);
 
-      await sendToGoogleSheet(flattened, "ER-Extraction");
-    } catch (aggErr) {
-      console.error("Aggregation error:", aggErr);
-    } finally {
-      client.close();
+        await sendToGoogleSheet(flattened, "ER-Extraction");
+      } catch (aggErr) {
+        console.error("Aggregation error:", aggErr);
+      } finally {
+        client.close();
+      }
     }
-  }
-);
+  );
+};
 
 async function sendToGoogleSheet(rows, sheetName) {
   // Path to your Google Service Account credentials JSON file

@@ -5,7 +5,7 @@ const fs = require("fs");
 const path = require("path");
 const TurndownService = require("turndown");
 const turndownService = new TurndownService();
-require('dotenv').config();
+require("dotenv").config();
 
 const url = process.env.MONGO_URL; // mongoDB connection URL
 const dbName = "production"; // database name
@@ -20,7 +20,8 @@ module.exports = async function extractDetails(uniId) {
         return;
       }
 
-      console.log("Connected successfully to MongoDB");
+      console.log("Details Extraction now using uni id: (" + uniId + ")");
+      console.log("Connected successfully to MongoDB (Details Extraction)");
       const db = client.db(dbName);
       const coursesCol = db.collection("courses");
 
@@ -92,7 +93,7 @@ module.exports = async function extractDetails(uniId) {
         const result = await db
           .collection("courses")
           .aggregate([
-            { $match: { university_id: uniId } }, // matched university
+            { $match: { university_id: ObjectId(uniId) } }, // matched university
             { $match: { "data.publish": "on" } }, // only published courses
 
             { $unwind: { path: "$data", preserveNullAndEmptyArrays: true } }, // open the data dictionary
@@ -215,7 +216,7 @@ module.exports = async function extractDetails(uniId) {
       }
     }
   );
-}
+};
 
 async function sendToGoogleSheet(rows, sheetName) {
   // Path to your Google Service Account credentials JSON file
