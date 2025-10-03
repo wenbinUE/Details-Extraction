@@ -88,19 +88,6 @@ module.exports = async function extractDetails(uniId) {
                 as: "specialisations_details",
               },
             },
-
-            {
-              $group: {
-                _id: "$_id",
-                name: { $first: "$name" },
-                major_map: {
-                  $push: {
-                    discipline: "$discipline_details.name",
-                    specialisation: "$specialisations_details.name",
-                  },
-                },
-              },
-            },
           ])
           .toArray();
 
@@ -108,26 +95,35 @@ module.exports = async function extractDetails(uniId) {
 
         const flattened = [];
 
+        const disciplineAdded = new Set();
+
         result.forEach((doc) => {
-          for (let i = 0; i < doc.major_map.length; i++) {
-            const discipline = Array.isArray(doc.major_map[i]?.discipline)
-              ? doc.major_map[i].discipline.join(", ")
-              : doc.major_map[i]?.discipline || "";
-
-            const specialisation = Array.isArray(doc.major_map[i]?.specialisation)
-              ? doc.major_map[i].specialisation.join(", ")
-              : doc.major_map[i]?.specialisation || "";
-
+          // Only add discipline once per course
+          const disciplineKey = doc._id + (doc.discipline_details[0]?.name || "");
+          if (!disciplineAdded.has(disciplineKey)) {
             flattened.push([
               doc._id || "",
               doc.name || "",
-              discipline,
-              specialisation,
+              (doc.discipline_details && doc.discipline_details[0]?.name) ? doc.discipline_details[0].name : "",
+              "Discipline"
             ]);
+            disciplineAdded.add(disciplineKey);
+          }
+
+          // Specialisations rows
+          if (doc.specialisations_details && doc.specialisations_details.length > 0) {
+            doc.specialisations_details.forEach((spec) => {
+              flattened.push([
+                doc._id || "",
+                doc.name || "",
+                spec.name,
+                "Specialisation"
+              ]);
+            });
           }
         });
 
-        // console.log(flattened);
+        console.log(flattened);
 
         await sendToGoogleSheet(flattened, "Disc-Spec-Extraction");
         await new Promise((resolve) => setTimeout(resolve, 2000));
