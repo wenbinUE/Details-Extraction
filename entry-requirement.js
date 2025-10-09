@@ -50,6 +50,23 @@ module.exports = async function extractDetails(uniId) {
             });
           }
 
+          // Changes data.entry_requirement.score_method from string to ObjectId
+          if (doc.data && Array.isArray(doc.data.entry_requirement)) {
+            doc.data.entry_requirement = doc.data.entry_requirement.map(function (
+              req
+            ) {
+              if (
+                req.score_method &&
+                typeof req.score_method === "string" &&
+                req.score_method.length === 24
+              ) {
+                req.score_method = ObjectId(req.score_method);
+                changed = true;
+              }
+              return req;
+            });
+          }
+
           if (changed) {
             await coursesCol.replaceOne({ _id: doc._id }, doc);
           }
@@ -79,12 +96,22 @@ module.exports = async function extractDetails(uniId) {
                 as: "qualification_details",
               },
             },
+            // group with scoring_methods collection to get scoring method names
+            {
+              $lookup: {
+                from: "scoring_methods",
+                localField: "data.entry_requirement.score_method",
+                foreignField: "_id",
+                as: "score_method_details",
+              },
+            },
             {
               $group: {
                 _id: "$_id",
                 name: { $first: "$name" },
                 qualifications: {
                   $push: {
+                    scoring_method: "$score_method_details.name",
                     qualification_type: "$qualification_details.name",
                     requirement_summary:
                       "$data.entry_requirement.requirement_summary",
@@ -105,20 +132,32 @@ module.exports = async function extractDetails(uniId) {
 
         result.forEach((doc) => {
           for (let i = 0; i < doc.qualifications.length; i++) {
+
+            // Changes qualification_type from array to comma-separated string
             let qualificationType = doc.qualifications[i]?.qualification_type;
             if (Array.isArray(qualificationType)) {
               qualificationType = qualificationType.join(", ");
             }
+
+            // Changes scoring_method from array to comma-separated string
+            let scoringMethod = doc.qualifications[i]?.scoring_method;
+            if (Array.isArray(scoringMethod)) {
+              scoringMethod = scoringMethod.join(", ");
+            }
+
+            // Changes additional_requirement from HTML to markdown
             let markedDown_additional_requirement = doc.qualifications[i]
               ?.additional_requirement
               ? turndownService.turndown(
                 doc.qualifications[i].additional_requirement
               )
               : "";
+
             flattened.push([
               doc._id || "",
               doc.name || "",
               qualificationType || "",
+              scoringMethod || "",
               doc.qualifications[i]?.requirement_summary || "",
               doc.qualifications[i]?.score_to_qualify || "",
               doc.qualifications[i]?.remarks || "",
@@ -168,6 +207,7 @@ async function sendToGoogleSheet(rows, sheetName) {
     "Course ID",
     "Course Name",
     "Qualification Type",
+    "Scoring Method",
     "Requirement Summary",
     "Score-to-qualify",
     "Remarks",
