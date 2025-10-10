@@ -17,7 +17,7 @@ app.get('/extract', async (req, res) => {
   // await extractDetails(uniId);
   // await entryRequirement(uniId);
   // await discSpec(uniId);
-  // await courseFeeNonDegree(uniId);
+  await courseFeeNonDegree(uniId);
   await courseFeeDegree(uniId);
   // await courseFeeNonDegree(uniId);
 });

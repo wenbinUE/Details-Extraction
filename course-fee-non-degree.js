@@ -31,47 +31,47 @@ module.exports = async function extractDetails(uniId) {
 
       try {
         // code cleaning here
-        const cursor = coursesCol.find();
-        while (await cursor.hasNext()) {
-          const doc = await cursor.next();
+        // const cursor = coursesCol.find();
+        // while (await cursor.hasNext()) {
+        //   const doc = await cursor.next();
 
-          let changed = false;
+        //   let changed = false;
 
-          // <---------------- COURSE EXCEPT DEGREE ----------------->
+        //   // <---------------- COURSE EXCEPT DEGREE ----------------->
 
-          // Convert data.domesticstd_fee_currency strings to ObjectId
-          if (
-            doc.data &&
-            typeof doc.data.domesticstd_fee_currency === "string" &&
-            doc.data.domesticstd_fee_currency.length === 24
-          ) {
-            doc.data.domesticstd_fee_currency = ObjectId(
-              doc.data.domesticstd_fee_currency
-            );
-            changed = true;
-          }
+        //   // Convert data.domesticstd_fee_currency strings to ObjectId
+        //   if (
+        //     doc.data &&
+        //     typeof doc.data.domesticstd_fee_currency === "string" &&
+        //     doc.data.domesticstd_fee_currency.length === 24
+        //   ) {
+        //     doc.data.domesticstd_fee_currency = ObjectId(
+        //       doc.data.domesticstd_fee_currency
+        //     );
+        //     changed = true;
+        //   }
 
-          // Convert data.internationalstd_fee_currency strings to ObjectId
-          if (
-            doc.data &&
-            typeof doc.data.internationalstd_fee_currency === "string" &&
-            doc.data.internationalstd_fee_currency.length === 24
-          ) {
-            doc.data.internationalstd_fee_currency = ObjectId(
-              doc.data.internationalstd_fee_currency
-            );
-            changed = true;
-          }
+        //   // Convert data.internationalstd_fee_currency strings to ObjectId
+        //   if (
+        //     doc.data &&
+        //     typeof doc.data.internationalstd_fee_currency === "string" &&
+        //     doc.data.internationalstd_fee_currency.length === 24
+        //   ) {
+        //     doc.data.internationalstd_fee_currency = ObjectId(
+        //       doc.data.internationalstd_fee_currency
+        //     );
+        //     changed = true;
+        //   }
 
-          // <---------------- COURSE EXCEPT DEGREE ----------------->
+        //   // <---------------- COURSE EXCEPT DEGREE ----------------->
 
-          // If any changes were made, save the document back
-          if (changed) {
-            await coursesCol.replaceOne({ _id: doc._id }, doc);
-          }
-        }
+        //   // If any changes were made, save the document back
+        //   if (changed) {
+        //     await coursesCol.replaceOne({ _id: doc._id }, doc);
+        //   }
+        // }
 
-        console.log("Code Cleaning Done!");
+        // console.log("Code Cleaning Done!");
 
         // aggregation code here
         const result = await db
@@ -280,35 +280,29 @@ module.exports = async function extractDetails(uniId) {
         const flattened = [];
 
         Object.values(grouped).forEach((doc) => {
-          // Set Period Start to "P1" if course is not "Degree"
-          let periodStartValue =
-            doc.fee_name !== "Degree" ? periodStart[0] : "";
-
-          if (doc.period_duration < 1) {
-            periodStartValue = "P" + doc.period_duration;
-          }
-
-          // Transform Period End Value
-          const periodEndValue = "P" + (doc.period_duration || "");
-
-          // Set Period Start to "P1" if course is not "Degree"
-          const previousNodeValue =
-            doc.fee_name !== "Degree" ? previousNode[0] : "";
-
-          // Set Period Start to "P1" if course is not "Degree"
-          const nextNodeValue = doc.fee_name !== "Degree" ? nextNode[0] : "";
+          const feeTypeLabel = doc.feeTypeLabel;
 
           flattened.push([
             doc._id, // Course ID
             doc.university_name, // University Name
             doc.name, // Course Name
-            doc.feeTypeLabel, // Fee Type
+            feeTypeLabel, // Fee Type
             doc.fee_name || "", // Fee Name
-            "P1", // Period Start
-            "P1", // Period End
-            doc.period_duration, // Period Duration
-            "BEGIN", // Previous Node
-            "FINAL", // Next Node
+            feeTypeLabel == "Tuition Fee" || feeTypeLabel == "Other Fee"
+              ? "P1"
+              : "N/A", // Period Start
+            feeTypeLabel == "Tuition Fee" || feeTypeLabel == "Other Fee"
+              ? "P1"
+              : "N/A", // Period End
+            feeTypeLabel == "Tuition Fee" || feeTypeLabel == "Other Fee"
+              ? doc.period_duration
+              : "0", // Period Duration
+            feeTypeLabel == "Tuition Fee" || feeTypeLabel == "Other Fee"
+              ? "BEGIN"
+              : "N/A", // Previous Node
+            feeTypeLabel == "Tuition Fee" || feeTypeLabel == "Other Fee"
+              ? "FINAL"
+              : "N/A", // Next Node
             "", // Period Location
             "", // Foreign Campus
             doc.local_fee_currency || "", // Local Fee Currency
@@ -346,7 +340,7 @@ module.exports = async function extractDetails(uniId) {
         console.log(cleanedFlattended);
 
         // now send `flattened` to Google Sheets
-        await sendToGoogleSheet(cleanedFlattended, "Fee-Extraction");
+        await sendToGoogleSheet(cleanedFlattended, "Fee-Extraction-Non-Degree");
       } catch (aggErr) {
         console.error("Aggregation error:", aggErr);
       } finally {

@@ -27,52 +27,8 @@ module.exports = async function extractDetails(uniId) {
         "Connected successfully to MongoDB (Course Fee Extraction - Degree)"
       );
       const db = client.db(dbName);
-      const coursesCol = db.collection("courses");
 
       try {
-        // code cleaning here
-        // const cursor = coursesCol.find();
-        // while (await cursor.hasNext()) {
-        //   const doc = await cursor.next();
-
-        //   let changed = false;
-
-        //   // <---------------- COURSE EXCEPT DEGREE ----------------->
-
-        //   // Convert data.domesticstd_fee_currency strings to ObjectId
-        //   if (
-        //     doc.data &&
-        //     typeof doc.data.domesticstd_fee_currency === "string" &&
-        //     doc.data.domesticstd_fee_currency.length === 24
-        //   ) {
-        //     doc.data.domesticstd_fee_currency = ObjectId(
-        //       doc.data.domesticstd_fee_currency
-        //     );
-        //     changed = true;
-        //   }
-
-        //   // Convert data.internationalstd_fee_currency strings to ObjectId
-        //   if (
-        //     doc.data &&
-        //     typeof doc.data.internationalstd_fee_currency === "string" &&
-        //     doc.data.internationalstd_fee_currency.length === 24
-        //   ) {
-        //     doc.data.internationalstd_fee_currency = ObjectId(
-        //       doc.data.internationalstd_fee_currency
-        //     );
-        //     changed = true;
-        //   }
-
-        //   // <---------------- COURSE EXCEPT DEGREE ----------------->
-
-        //   // If any changes were made, save the document back
-        //   if (changed) {
-        //     await coursesCol.replaceOne({ _id: doc._id }, doc);
-        //   }
-        // }
-
-        // console.log("Code Cleaning Done!");
-
         // aggregation code here
         const result = await db
           .collection("courses")
@@ -281,10 +237,15 @@ module.exports = async function extractDetails(uniId) {
           // Transform Period End Value
           const periodEndValue = "P" + (doc.period_duration || "");
 
-          // Find whether the period duration is full or non-full
-          const duration = Number(doc.period_duration);
+          // Get fee type label
+          const feeTypeLabel = doc.feeTypeLabel;
+
+          // Get numeric fee amounts for local and international
           const localFeeAmountValue = Number(doc.local_fee_amount);
           const intlFeeAmountValue = Number(doc.intl_fee_amount);
+
+          // Find whether the period duration is full or non-full
+          const duration = Number(doc.period_duration);
           const isFullYear = Number.isInteger(duration) && duration > 0;
 
           if (isFullYear) {
@@ -293,20 +254,34 @@ module.exports = async function extractDetails(uniId) {
               doc._id, // Course ID
               doc.university_name, // University Name
               doc.name, // Course Name
-              doc.feeTypeLabel, // Fee Type
+              feeTypeLabel, // Fee Type
               doc.fee_name || "", // Fee Name
-              "P1", // Period Start
-              periodEndValue, // Period End
-              1, // Period Duration
-              "BEGIN", // Previous Node
-              "FINAL", // Next Node
+              feeTypeLabel == "Tuition Fee" || feeTypeLabel == "Other Fee"
+                ? "P1"
+                : "N/A", // Period Start
+              feeTypeLabel == "Tuition Fee" || feeTypeLabel == "Other Fee"
+                ? periodEndValue
+                : "N/A", // Period End
+              feeTypeLabel == "Tuition Fee" || feeTypeLabel == "Other Fee"
+                ? "1"
+                : "0", // Period Duration
+              feeTypeLabel == "Tuition Fee" || feeTypeLabel == "Other Fee"
+                ? "BEGIN"
+                : "N/A", // Previous Node
+              feeTypeLabel == "Tuition Fee" || feeTypeLabel == "Other Fee"
+                ? "FINAL"
+                : "N/A", // Next Node
               "", // Period Location
               "", // Foreign Campus
               doc.local_fee_currency || "", // Local Fee Currency
-              localFeeAmountValue, // Local Fee Amount (annual)
+              feeTypeLabel == "Tuition Fee" || feeTypeLabel == "Other Fee"
+                ? localFeeAmountValue / duration
+                : localFeeAmountValue, // Local Fee Amount (annual)
               doc.local_fee_details.filter(Boolean).join("\n"), // Local Fee Description
               doc.international_fee_currency || "", // International Fee Currency
-              intlFeeAmountValue, // International Fee Amount (annual)
+              feeTypeLabel == "Tuition Fee" || feeTypeLabel == "Other Fee"
+                ? intlFeeAmountValue / duration
+                : intlFeeAmountValue, // International Fee Amount (annual)
               doc.intl_fee_details.filter(Boolean).join("\n"), // International Fee Description
             ]);
           } else if (!isFullYear) {
@@ -316,43 +291,44 @@ module.exports = async function extractDetails(uniId) {
             const remainder = (duration % 1) + 1;
             const roundedDownPeriodDuration = Math.floor(duration);
 
-            if (doc.feeTypeLabel === "Tuition Fee") {
+            if (
+              feeTypeLabel === "Tuition Fee" ||
+              feeTypeLabel === "Other Fee"
+            ) {
               // separate tuition fee according to years
-              for (let i = 1; i <= roundedDownPeriodDuration; i++) {
+              for (let i = 1; i < 3; i++) {
                 const annualFee = localFeeAmountValue / duration;
                 const annualFeeForRemainder = annualFee * remainder;
-                const annualIntlFee = Number(intlFeeAmountValue) / duration;
-                const annualIntlFeeForRemainder =
-                  (Number(intlFeeAmountValue) / duration) * remainder;
+                const annualIntlFee = intlFeeAmountValue / duration;
+                const annualIntlFeeForRemainder = annualIntlFee * remainder;
 
-                if (i <= roundedDownPeriodDuration) {
+                if (i < 3) {
                   flattened.push([
                     doc._id, // Course ID
                     doc.university_name, // University Name
                     doc.name, // Course Name
                     doc.feeTypeLabel, // Fee Type
                     doc.fee_name || "", // Fee Name
-                    "P" + i, // Period Start
-                    i !== roundedDownPeriodDuration ? "P" + (i + 1) : "P" + i, // Period End
-                    i !== roundedDownPeriodDuration ? "1" : remainder, // Period Duration
-                    i === 1 ? previousNode[0] : `P${i - 1}`, // Previous Node
-                    i < roundedDownPeriodDuration ? nextNode[1] : nextNode[0], // Next Node
+                    i !== 2 ? "P" + i : "P" + roundedDownPeriodDuration, // Period Start
+                    i !== 2 ? "P" + (i + 1) : "P" + roundedDownPeriodDuration, // Period End
+                    i !== 2 ? "1" : remainder, // Period Duration
+                    i === 1 ? previousNode[0] : `P${i}`, // Previous Node
+                    i !== 2 ? nextNode[1] : nextNode[0], // Next Node
                     "", // Period Location
                     "", // Foreign Campus
                     doc.local_fee_currency || "", // Local Fee Currency
-                    i < roundedDownPeriodDuration
-                      ? annualFee
-                      : annualFeeForRemainder, // Local Fee Amount (annual)
+                    i !== 2 ? annualFee : annualFeeForRemainder, // Local Fee Amount (annual)
                     doc.local_fee_details.filter(Boolean).join("\n"), // Local Fee Description
                     doc.international_fee_currency || "", // International Fee Currency
-                    i < roundedDownPeriodDuration
-                      ? annualIntlFee
-                      : annualIntlFeeForRemainder, // International Fee Amount (annual)
+                    i !== 2 ? annualIntlFee : annualIntlFeeForRemainder, // International Fee Amount (annual)
                     doc.intl_fee_details.filter(Boolean).join("\n"), // International Fee Description
                   ]);
                 }
               }
-            } else if (doc.feeTypeLabel !== "Tuition Fee") {
+            } else if (
+              feeTypeLabel !== "Tuition Fee" &&
+              feeTypeLabel !== "Other Fee"
+            ) {
               // for other fee types, just take the normal value
 
               flattened.push([
@@ -361,11 +337,11 @@ module.exports = async function extractDetails(uniId) {
                 doc.name, // Course Name
                 doc.feeTypeLabel, // Fee Type
                 doc.fee_name || "", // Fee Name
-                "P1", // Period Start
-                periodEndValue, // Period End
-                1, // Period Duration
-                previousNode[0], // Previous Node
-                nextNode[0], // Next Node
+                "N/A", // Period Start
+                "N/A", // Period End
+                "0", // Period Duration
+                "N/A", // Previous Node
+                "N/A", // Next Node
                 "", // Period Location
                 "", // Foreign Campus
                 doc.local_fee_currency || "", // Local Fee Currency
