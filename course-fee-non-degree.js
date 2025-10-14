@@ -10,7 +10,7 @@ require("dotenv").config();
 const url = process.env.MONGO_URL; // mongoDB connection URL
 const dbName = "production"; // database name
 
-module.exports = async function extractDetails(uniId) {
+module.exports = async function extractDetails(uniId, spreadsheetId, sheetname = "Fee-Extraction-Non-Degree-CWB") {
   MongoClient.connect(
     url,
     { useNewUrlParser: true, useUnifiedTopology: true },
@@ -29,49 +29,73 @@ module.exports = async function extractDetails(uniId) {
       const db = client.db(dbName);
       const coursesCol = db.collection("courses");
 
+      // Path to your Google Service Account credentials JSON file
+      const credentials = JSON.parse(
+        fs.readFileSync(
+          path.join(
+            "C:",
+            "Uni_Enrol_Intern",
+            "ETL_Project",
+            "Details_Extraction",
+            "JSON_key",
+            "mongouedetailsextration-2b7519da48c4.json"
+          ),
+          "utf8"
+        )
+      );
+
+      const auth = new google.auth.JWT({
+        email: credentials.client_email,
+        key: credentials.private_key,
+        scopes: ["https://www.googleapis.com/auth/spreadsheets"],
+      });
+
+      // Authorize once
+      await auth.authorize();
+
       try {
         // code cleaning here
-        // const cursor = coursesCol.find();
-        // while (await cursor.hasNext()) {
-        //   const doc = await cursor.next();
+        const cursor = coursesCol.find();
+        while (await cursor.hasNext()) {
+          const doc = await cursor.next();
 
-        //   let changed = false;
+          let changed = false;
 
-        //   // <---------------- COURSE EXCEPT DEGREE ----------------->
+          // <---------------- COURSE EXCEPT DEGREE ----------------->
 
-        //   // Convert data.domesticstd_fee_currency strings to ObjectId
-        //   if (
-        //     doc.data &&
-        //     typeof doc.data.domesticstd_fee_currency === "string" &&
-        //     doc.data.domesticstd_fee_currency.length === 24
-        //   ) {
-        //     doc.data.domesticstd_fee_currency = ObjectId(
-        //       doc.data.domesticstd_fee_currency
-        //     );
-        //     changed = true;
-        //   }
+          // Convert data.domesticstd_fee_currency strings to ObjectId
+          if (
+            doc.data &&
+            typeof doc.data.domesticstd_fee_currency === "string" &&
+            doc.data.domesticstd_fee_currency.length === 24
+          ) {
+            doc.data.domesticstd_fee_currency = ObjectId(
+              doc.data.domesticstd_fee_currency
+            );
+            changed = true;
+          }
 
-        //   // Convert data.internationalstd_fee_currency strings to ObjectId
-        //   if (
-        //     doc.data &&
-        //     typeof doc.data.internationalstd_fee_currency === "string" &&
-        //     doc.data.internationalstd_fee_currency.length === 24
-        //   ) {
-        //     doc.data.internationalstd_fee_currency = ObjectId(
-        //       doc.data.internationalstd_fee_currency
-        //     );
-        //     changed = true;
-        //   }
+          // Convert data.internationalstd_fee_currency strings to ObjectId
+          if (
+            doc.data &&
+            typeof doc.data.internationalstd_fee_currency === "string" &&
+            doc.data.internationalstd_fee_currency.length === 24
+          ) {
+            doc.data.internationalstd_fee_currency = ObjectId(
+              doc.data.internationalstd_fee_currency
+            );
+            changed = true;
+          }
 
-        //   // <---------------- COURSE EXCEPT DEGREE ----------------->
+          // <---------------- COURSE EXCEPT DEGREE ----------------->
 
-        //   // If any changes were made, save the document back
-        //   if (changed) {
-        //     await coursesCol.replaceOne({ _id: doc._id }, doc);
-        //   }
-        // }
+          // If any changes were made, save the document back
+          if (changed) {
+            await coursesCol.replaceOne({ _id: doc._id }, doc);
+          }
+        }
 
-        // console.log("Code Cleaning Done!");
+        console.log("Code Cleaning Done!");
 
         // aggregation code here
         const result = await db
@@ -340,9 +364,12 @@ module.exports = async function extractDetails(uniId) {
         console.log(cleanedFlattended);
 
         // now send `flattened` to Google Sheets
-        await sendToGoogleSheet(cleanedFlattended, "Fee-Extraction-Non-Degree");
+        await sendToGoogleSheet(flattened, sheetname, spreadsheetId, auth);
+        await writeStatusToSheet(spreadsheetId, "Course-Fee-Non-Degree", "/", auth); // "/" for success, "X" for fail
+        await new Promise((resolve) => setTimeout(resolve, 2000));
       } catch (aggErr) {
         console.error("Aggregation error:", aggErr);
+        await writeStatusToSheet(spreadsheetId, "Course-Fee-Non-Degree", "X", auth);
       } finally {
         client.close();
       }
@@ -350,31 +377,7 @@ module.exports = async function extractDetails(uniId) {
   );
 };
 
-async function sendToGoogleSheet(rows, sheetName) {
-  // Path to your Google Service Account credentials JSON file
-  const credentials = JSON.parse(
-    fs.readFileSync(
-      path.join(
-        "C:",
-        "Uni_Enrol_Intern",
-        "ETL_Project",
-        "Details_Extraction",
-        "JSON_key",
-        "mongouedetailsextration-2b7519da48c4.json"
-      ),
-      "utf8"
-    )
-  );
-
-  const auth = new google.auth.JWT({
-    email: credentials.client_email,
-    key: credentials.private_key,
-    scopes: ["https://www.googleapis.com/auth/spreadsheets"],
-  });
-
-  // Authorize once
-  await auth.authorize();
-
+async function sendToGoogleSheet(rows, sheetName, spreadsheetId, auth) {
   const headers = [
     "Course ID",
     "University Name",
@@ -399,7 +402,7 @@ async function sendToGoogleSheet(rows, sheetName) {
   const allRows = [headers, ...rows];
 
   const sheets = google.sheets({ version: "v4", auth });
-  const spreadsheetId = "1CeeOcN8B2B2qj6oTVu2yYQPP5YFt7QXxeBdOoNFIhKw"; // from your Google Sheet URL
+  // const spreadsheetId = "1CeeOcN8B2B2qj6oTVu2yYQPP5YFt7QXxeBdOoNFIhKw"; // from your Google Sheet URL
   const range = `'${sheetName}'!A1`; // starting cell
 
   // Optionally create the sheet if it doesn't exist
@@ -463,4 +466,34 @@ async function sendToGoogleSheet(rows, sheetName) {
   }
 
   console.log(`Data pushed to Google Sheet: ${sheetName}`);
+}
+
+async function writeStatusToSheet(spreadsheetId, moduleName, status, auth) {
+  const sheets = google.sheets({ version: "v4", auth });
+  const range = `'Status'!A2:B2`;
+
+  // Create Status sheet if not exists
+  try {
+    await sheets.spreadsheets.batchUpdate({
+      spreadsheetId,
+      resource: {
+        requests: [{ addSheet: { properties: { title: "Status" } } }],
+      },
+    });
+  } catch (e) {}
+
+  // Always append only the status row (no header)
+  const values = [
+    [moduleName, status],
+  ];
+
+  await sheets.spreadsheets.values.append({
+    spreadsheetId,
+    range,
+    valueInputOption: "RAW",
+    insertDataOption: "INSERT_ROWS",
+    resource: { values },
+  });
+
+  console.log(`Status for (${moduleName}) appended to Google Sheet: ${status}`);
 }
