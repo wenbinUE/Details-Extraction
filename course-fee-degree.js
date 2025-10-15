@@ -409,7 +409,7 @@ module.exports = async function extractDetails(
         console.log(cleanedFlattended);
 
         // now send `flattened` to Google Sheets
-        await sendToGoogleSheet(flattened, sheetname, spreadsheetId, auth);
+        await sendToGoogleSheet(cleanedFlattended, sheetname, spreadsheetId, auth);
         await writeStatusToSheet(spreadsheetId, "Course-Fee-Degree", "/", auth); // "/" for success, "X" for fail
         await new Promise((resolve) => setTimeout(resolve, 2000));
       } catch (aggErr) {

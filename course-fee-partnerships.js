@@ -90,7 +90,7 @@ module.exports = async function extractDetails(
           .aggregate([
             { $match: { university_id: ObjectId(uniId) } }, // matched university
             // { $match: { "data.publish": "on" } }, // only published courses
-            { $match: { _id: ObjectId("5a3a78f92a2e3c51d02cc774") } },
+            { $match: { _id: ObjectId("67763ac72ecf2e69ec6e3a65") } },
             {
               $match: {
                 "data.level_of_studies": ObjectId("5a1bbab02a2e3c29ecb9233b"),
@@ -205,6 +205,9 @@ module.exports = async function extractDetails(
                 partner_foreign_campus: "$data.partner_university",
                 international_fee_currency: {
                   $arrayElemAt: ["$international_fee_currency_details.name", 0],
+                },
+                partner_fee_desc: {
+                  $ifNull: ["$data.total_partner_fees_description", ""],
                 },
                 domestic_fee: "$domesticstd_course_fees_arr.v",
                 international_fee: {
@@ -352,8 +355,12 @@ module.exports = async function extractDetails(
 
           if (isFullYear && isPartnerFullYear) {
             // If the period duration is full year (e.g. 3, 4)
-            if (feeTypeLabel == "Tuition Fee" || feeTypeLabel == "Other Fee") {
-              for (let i = 1; i < 3; i++) {
+
+            for (let i = 1; i < 3; i++) {
+              if (
+                feeTypeLabel == "Tuition Fee" ||
+                (feeTypeLabel == "Other Fee" && i === 1)
+              ) {
                 flattened.push([
                   doc._id, // Course ID
                   doc.university_name, // University Name
@@ -373,10 +380,9 @@ module.exports = async function extractDetails(
                   i === 1
                     ? localFeeAmountValue / duration
                     : partnerFeeAmountValue / partnerPeriodDuration, // Local Fee Amount (annual)
-                  doc.local_fee_details.filter(Boolean).join("\n"), // Local Fee Description
-                  doc.international_fee_currency || "", // International Fee Currency
-                  intlFeeAmountValue / duration, // International Fee Amount
-                  doc.intl_fee_details.filter(Boolean).join("\n"), // International Fee Description
+                  i === 1 
+                    ? doc.local_fee_details.filter(Boolean).join("\n")
+                    : turndownService.turndown(doc.partner_fee_desc), // Local Fee Description
                 ]);
               }
             }
@@ -401,9 +407,6 @@ module.exports = async function extractDetails(
                 doc.local_fee_currency || "", // Local Fee Currency
                 localFeeAmountValue, // Local Fee Amount (annual)
                 doc.local_fee_details.filter(Boolean).join("\n"), // Local Fee Description
-                doc.international_fee_currency || "", // International Fee Currency
-                intlFeeAmountValue, // International Fee Amount
-                doc.intl_fee_details.filter(Boolean).join("\n"), // International Fee Description
               ]);
             }
           }
@@ -506,7 +509,7 @@ module.exports = async function extractDetails(
         console.log(cleanedFlattended);
 
         // now send `flattened` to Google Sheets
-        await sendToGoogleSheet(flattened, sheetname, spreadsheetId, auth);
+        await sendToGoogleSheet(cleanedFlattended, sheetname, spreadsheetId, auth);
         await writeStatusToSheet(
           spreadsheetId,
           "Course-Fee-Partnerships",
@@ -543,13 +546,9 @@ async function sendToGoogleSheet(rows, sheetName, spreadsheetId, auth) {
     "Next Node",
     "Period Location",
     "Foreign Campus",
-    "Partner Fee Currency",
     "Local Fee Currency",
     "Local Fee Amount",
     "Local Fee Description",
-    "International Fee Currency",
-    "International Fee Amount",
-    "International Fee Description",
   ];
 
   const allRows = [headers, ...rows];
