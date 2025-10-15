@@ -8,7 +8,7 @@ const turndownService = new TurndownService();
 require("dotenv").config();
 
 const url = process.env.MONGO_URL; // mongoDB connection URL
-const dbName = "production"; // database name
+const dbName = process.env.DB_NAME; // database name
 
 module.exports = async function extractDetails(
   uniId,
@@ -32,20 +32,11 @@ module.exports = async function extractDetails(
       );
       const db = client.db(dbName);
 
-      // Path to your Google Service Account credentials JSON file
-      const credentials = JSON.parse(
-        fs.readFileSync(
-          path.join(
-            "C:",
-            "Uni_Enrol_Intern",
-            "ETL_Project",
-            "Details_Extraction",
-            "JSON_key",
-            "mongouedetailsextration-2b7519da48c4.json"
-          ),
-          "utf8"
-        )
-      );
+      // Path to your Google Service Account credentials
+      const credentials = {
+        client_email: process.env.GOOGLE_CLIENT_EMAIL,
+        private_key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n'),
+      };
 
       const auth = new google.auth.JWT({
         email: credentials.client_email,
@@ -219,10 +210,11 @@ module.exports = async function extractDetails(
           if (feeTypeLabel === "Other Cost") {
             grouped[key].local_fee_amount +=
               Number(doc.domestic_fee.fees_amount) || 0;
-            if (doc.domestic_fee.fees_detail)
+            if (doc.domestic_fee.fees_detail) {
               grouped[key].local_fee_details.push(
                 turndownService.turndown(doc.domestic_fee.fees_detail)
               );
+            }
 
             // International fee sum (if present)
             if (doc.international_fee?.v?.fees_amount) {

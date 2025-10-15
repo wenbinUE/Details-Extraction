@@ -20,9 +20,9 @@ app.get('/extract', async (req, res) => {
   await extractDetails(uniId, spreadsheetId);
   await entryRequirement(uniId, spreadsheetId);
   await discSpec(uniId, spreadsheetId);
-  await courseFeeNonDegree(uniId, spreadsheetId);
-  await courseFeeDegree(uniId, spreadsheetId);
-  await courseFeePartnerships(uniId, spreadsheetId);
+  // await courseFeeNonDegree(uniId, spreadsheetId);
+  // await courseFeeDegree(uniId, spreadsheetId);
+  // await courseFeePartnerships(uniId, spreadsheetId);
 });
 
 const PORT = process.env.PORT || 3000;

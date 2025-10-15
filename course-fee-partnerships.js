@@ -8,12 +8,12 @@ const turndownService = new TurndownService();
 require("dotenv").config();
 
 const url = process.env.MONGO_URL; // mongoDB connection URL
-const dbName = "production"; // database name
+const dbName = process.env.DB_NAME; // database name
 
 module.exports = async function extractDetails(
   uniId,
   spreadsheetId,
-  sheetname = "Fee-Extraction-Partnerships-CWB"
+  sheetname = "Fee-Extraction-Partnerships-CWB-Bio"
 ) {
   MongoClient.connect(
     url,
@@ -33,20 +33,11 @@ module.exports = async function extractDetails(
       const db = client.db(dbName);
       const coursesCol = db.collection("courses");
 
-      // Path to your Google Service Account credentials JSON file
-      const credentials = JSON.parse(
-        fs.readFileSync(
-          path.join(
-            "C:",
-            "Uni_Enrol_Intern",
-            "ETL_Project",
-            "Details_Extraction",
-            "JSON_key",
-            "mongouedetailsextration-2b7519da48c4.json"
-          ),
-          "utf8"
-        )
-      );
+      // Path to your Google Service Account credentials
+      const credentials = {
+        client_email: process.env.GOOGLE_CLIENT_EMAIL,
+        private_key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n'),
+      };
 
       const auth = new google.auth.JWT({
         email: credentials.client_email,
@@ -353,6 +344,9 @@ module.exports = async function extractDetails(
           // Find the total years of partner + local courses (e.g. 2+2 = 4)
           const totalYears = Number(partnerPeriodDuration + duration);
 
+          const remainderForPartner = (partnerPeriodDuration % 1) + 1; // Remainder year (e.g. 1.5)
+          const roundedDownPartnerDuration = Math.floor(partnerPeriodDuration); // Rounded down period duration (e.g. 2.4 -> 2)
+
           if (isFullYear && isPartnerFullYear) {
             // If the period duration is full year (e.g. 3, 4)
 
@@ -380,7 +374,7 @@ module.exports = async function extractDetails(
                   i === 1
                     ? localFeeAmountValue / duration
                     : partnerFeeAmountValue / partnerPeriodDuration, // Local Fee Amount (annual)
-                  i === 1 
+                  i === 1
                     ? doc.local_fee_details.filter(Boolean).join("\n")
                     : turndownService.turndown(doc.partner_fee_desc), // Local Fee Description
                 ]);
@@ -409,78 +403,65 @@ module.exports = async function extractDetails(
                 doc.local_fee_details.filter(Boolean).join("\n"), // Local Fee Description
               ]);
             }
+          } else if (!isFullYear || !isPartnerFullYear) {
+            // If local is full, but partner is non-full (2 + 2.5)
+            let isFullYear_compare = "0";
+            let isPartnerFullYear_compare = "0";
+
+            if (isFullYear) isFullYear_compare = "1";
+            if (isPartnerFullYear) isPartnerFullYear_compare = "1";
+
+            if (
+              isFullYear_compare === "1" &&
+              isPartnerFullYear_compare === "0"
+            ) {
+              if (
+                feeTypeLabel == "Tuition Fee" 
+                // ||
+                // feeTypeLabel == "Other Fee" 
+              ) {
+                flattened.push([
+                  doc._id, // Course ID
+                  doc.university_name, // University Name
+                  doc.name, // Course Name
+                  feeTypeLabel, // Fee Type
+                  doc.fee_name || "", // Fee Name
+                  "P1", // Period Start
+                  "P" + duration, // Period End
+                  "1", // Period Duration
+                  "BEGIN", // Previous Node
+                  "TRANSFER", // Next Node
+                  "Home", // Period Location
+                  "", // Foreign Campus
+                  doc.local_fee_currency, // Local Fee Currency
+                  localFeeAmountValue / duration,// Local Fee Amount (annual)
+                  doc.local_fee_details.filter(Boolean).join("\n"), // Local Fee Description
+                ]);
+
+                for (let i = 1; i < 3; i ++) {
+                  flattened.push([
+                    doc._id, // Course ID
+                    doc.university_name, // University Name
+                    doc.name, // Course Name
+                    feeTypeLabel, // Fee Type
+                    doc.fee_name || "", // Fee Name
+                    i === 1 ? "P" + (duration + 1) : "P" + totalYears, // Period Start
+                    i === 1 ? "P" + (totalYears - 1) : "P" + totalYears, // Period End
+                    i === 1 ? "1" : remainderForPartner, // Period Duration
+                    i === 1 ? "BEGIN" : "P" + duration, // Previous Node
+                    i === 1 ? "CONTINUE" : "FINAL", // Next Node
+                    "Foreign", // Period Location
+                    doc.partner_foreign_campus, // Foreign Campus
+                    doc.partner_fee_currency, // Partner Fee Currency
+                    i === 1
+                      ? partnerFeeAmountValue / roundedDownPartnerDuration
+                      : partnerFeeAmountValue / remainderForPartner, // Partner Fee Amount (annual)
+                    turndownService.turndown(doc.partner_fee_desc), // Partner Fee Description
+                  ]);
+                }
+              }
+            }
           }
-          // else if (!isFullYear) {
-          //   // Else If the period duration is non-full year (e.g. 3.5, 4.3)
-
-          //   // Process non-full year
-          //   const remainder = (duration % 1) + 1;
-          //   const roundedDownPeriodDuration = Math.floor(duration);
-
-          //   if (
-          //     feeTypeLabel === "Tuition Fee" ||
-          //     feeTypeLabel === "Other Fee"
-          //   ) {
-          //     // separate tuition fee according to years
-          //     for (let i = 1; i < 3; i++) {
-          //       const annualFee = localFeeAmountValue / duration;
-          //       const annualFeeForRemainder = annualFee * remainder;
-          //       const annualIntlFee = intlFeeAmountValue / duration;
-          //       const annualIntlFeeForRemainder = annualIntlFee * remainder;
-
-          //       if (i < 3) {
-          //         flattened.push([
-          //           doc._id, // Course ID
-          //           doc.university_name, // University Name
-          //           doc.name, // Course Name
-          //           doc.feeTypeLabel, // Fee Type
-          //           doc.fee_name || "", // Fee Name
-          //           i !== 2 ? "P" + i : "P" + roundedDownPeriodDuration, // Period Start
-          //           i !== 2 ? "P" + (i + 1) : "P" + roundedDownPeriodDuration, // Period End
-          //           i !== 2 ? "1" : remainder, // Period Duration
-          //           i === 1 ? previousNode[0] : `P${i}`, // Previous Node
-          //           i !== 2 ? nextNode[1] : nextNode[0], // Next Node
-          //           "", // Period Location
-          //           doc.partner_foreign_campus || "", // Foreign Campus
-          //           doc.partner_fee_currency || "", // Partner Fee Currency
-          //           doc.local_fee_currency || "", // Local Fee Currency
-          //           i !== 2 ? annualFee : annualFeeForRemainder, // Local Fee Amount (annual)
-          //           doc.local_fee_details.filter(Boolean).join("\n"), // Local Fee Description
-          //           doc.international_fee_currency || "", // International Fee Currency
-          //           i !== 2 ? annualIntlFee : annualIntlFeeForRemainder, // International Fee Amount (annual)
-          //           doc.intl_fee_details.filter(Boolean).join("\n"), // International Fee Description
-          //         ]);
-          //       }
-          //     }
-          //   } else if (
-          //     feeTypeLabel !== "Tuition Fee" &&
-          //     feeTypeLabel !== "Other Fee"
-          //   ) {
-          //     // for other fee types, just take the normal value
-
-          //     flattened.push([
-          //       doc._id, // Course ID
-          //       doc.university_name, // University Name
-          //       doc.name, // Course Name
-          //       doc.feeTypeLabel, // Fee Type
-          //       doc.fee_name || "", // Fee Name
-          //       "N/A", // Period Start
-          //       "N/A", // Period End
-          //       "0", // Period Duration
-          //       "N/A", // Previous Node
-          //       "N/A", // Next Node
-          //       "", // Period Location
-          //       doc.partner_foreign_campus || "", // Foreign Campus
-          //       doc.partner_fee_currency || "", // Partner Fee Currency
-          //       doc.local_fee_currency || "", // Local Fee Currency
-          //       localFeeAmountValue, // Local Fee Amount (annual)
-          //       doc.local_fee_details.filter(Boolean).join("\n"), // Local Fee Description
-          //       doc.international_fee_currency || "", // International Fee Currency
-          //       intlFeeAmountValue || 0, // International Fee Amount (annual)
-          //       doc.intl_fee_details.filter(Boolean).join("\n"), // International Fee Description
-          //     ]);
-          //   }
-          // }
         });
 
         const cleanedFlattended = flattened.filter((row) => {
@@ -509,7 +490,12 @@ module.exports = async function extractDetails(
         console.log(cleanedFlattended);
 
         // now send `flattened` to Google Sheets
-        await sendToGoogleSheet(cleanedFlattended, sheetname, spreadsheetId, auth);
+        await sendToGoogleSheet(
+          cleanedFlattended,
+          sheetname,
+          spreadsheetId,
+          auth
+        );
         await writeStatusToSheet(
           spreadsheetId,
           "Course-Fee-Partnerships",
