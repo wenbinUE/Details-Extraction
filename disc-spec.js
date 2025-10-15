@@ -23,10 +23,8 @@ module.exports = async function extractDetails(uniId, spreadsheetId, sheetname =
       const coursesCol = db.collection("courses");
 
       // Path to your Google Service Account credentials
-      const credentials = {
-        client_email: process.env.GOOGLE_CLIENT_EMAIL,
-        private_key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n'),
-      };
+      const credentialsPath = process.env.GOOGLE_APPLICATION_CREDENTIALS;
+      const credentials = JSON.parse(fs.readFileSync(credentialsPath, "utf8"));
 
       const auth = new google.auth.JWT({
         email: credentials.client_email,
