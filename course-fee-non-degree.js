@@ -8,7 +8,7 @@ const turndownService = new TurndownService();
 require("dotenv").config();
 
 const url = process.env.MONGO_URL; // mongoDB connection URL
-const dbName = "production"; // database name
+const dbName = process.env.DB_NAME; // database name
 
 module.exports = async function extractDetails(uniId, spreadsheetId, sheetname = "Fee-Extraction-Non-Degree-CWB") {
   MongoClient.connect(
@@ -29,20 +29,9 @@ module.exports = async function extractDetails(uniId, spreadsheetId, sheetname =
       const db = client.db(dbName);
       const coursesCol = db.collection("courses");
 
-      // Path to your Google Service Account credentials JSON file
-      const credentials = JSON.parse(
-        fs.readFileSync(
-          path.join(
-            "C:",
-            "Uni_Enrol_Intern",
-            "ETL_Project",
-            "Details_Extraction",
-            "JSON_key",
-            "mongouedetailsextration-2b7519da48c4.json"
-          ),
-          "utf8"
-        )
-      );
+      // Path to your Google Service Account credentials
+      const credentialsPath = process.env.GOOGLE_APPLICATION_CREDENTIALS;
+      const credentials = JSON.parse(fs.readFileSync(credentialsPath, "utf8"));
 
       const auth = new google.auth.JWT({
         email: credentials.client_email,
