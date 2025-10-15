@@ -231,22 +231,24 @@ module.exports = async function extractDetails(
             if (grouped[key].local_fee_amount === 0) {
               grouped[key].local_fee_amount =
                 doc.domestic_fee.fees_amount || "";
-              if (doc.domestic_fee.fees_detail)
+              if (doc.domestic_fee.fees_detail) {
                 grouped[key].local_fee_details.push(
                   turndownService.turndown(doc.domestic_fee.fees_detail)
                 );
+              }
               if (doc.international_fee?.v?.fees_amount) {
                 grouped[key].intl_fee_amount =
                   turndownService.turndown(
                     String(doc.international_fee?.v?.fees_amount)
                   ) || "";
               }
-              if (doc.international_fee?.v?.fees_detail)
+              if (doc.international_fee?.v?.fees_detail) {
                 grouped[key].intl_fee_details.push(
                   turndownService.turndown(
                     String(doc.international_fee.v.fees_detail)
                   )
                 );
+              }
             }
           }
         });
@@ -457,7 +459,17 @@ async function sendToGoogleSheet(rows, sheetName, spreadsheetId, auth) {
       },
     });
   } catch (e) {
-    // Ignore error if sheet already exists
+    // Ignore error if sheet already exists, log others
+    if (
+      !(
+        e.errors &&
+        Array.isArray(e.errors) &&
+        e.errors.some(err => err.reason === "duplicate")
+      ) &&
+      !(e.code === 400 && e.message && e.message.includes("already exists"))
+    ) {
+      console.error("Error adding Status sheet:", e.message || e);
+    }
   }
 
   // Clear the sheet before writing
@@ -516,7 +528,19 @@ async function writeStatusToSheet(spreadsheetId, moduleName, status, auth) {
         requests: [{ addSheet: { properties: { title: "Status" } } }],
       },
     });
-  } catch (e) {}
+  } catch (e) {
+    // Ignore error if sheet already exists, log others
+    if (
+      !(
+        e.errors &&
+        Array.isArray(e.errors) &&
+        e.errors.some(err => err.reason === "duplicate")
+      ) &&
+      !(e.code === 400 && e.message && e.message.includes("already exists"))
+    ) {
+      console.error("Error adding Status sheet:", e.message || e);
+    }
+  }
 
   // Bold the headers
   const res = await sheets.spreadsheets.get({ spreadsheetId });

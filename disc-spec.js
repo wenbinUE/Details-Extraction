@@ -177,7 +177,17 @@ async function sendToGoogleSheet(rows, sheetName, spreadsheetId, auth) {
       },
     });
   } catch (e) {
-    // Ignore error if sheet already exists
+    // Ignore error if sheet already exists, log others
+    if (
+      !(
+        e.errors &&
+        Array.isArray(e.errors) &&
+        e.errors.some(err => err.reason === "duplicate")
+      ) &&
+      !(e.code === 400 && e.message && e.message.includes("already exists"))
+    ) {
+      console.error("Error adding Status sheet:", e.message || e);
+    }
   }
 
   // Clear the sheet before writing
@@ -237,7 +247,19 @@ async function writeStatusToSheet(spreadsheetId, moduleName, status, auth) {
         requests: [{ addSheet: { properties: { title: "Status" } } }],
       },
     });
-  } catch (e) {}
+  } catch (e) {
+    // Ignore error if sheet already exists, log others
+    if (
+      !(
+        e.errors &&
+        Array.isArray(e.errors) &&
+        e.errors.some(err => err.reason === "duplicate")
+      ) &&
+      !(e.code === 400 && e.message && e.message.includes("already exists"))
+    ) {
+      console.error("Error adding Status sheet:", e.message || e);
+    }
+  }
 
   // Always append only the status row (no header)
   const values = [
