@@ -299,10 +299,10 @@ module.exports = async function extractDetails(uniId, spreadsheetId, sheetname =
           const feeTypeLabel = doc.feeTypeLabel;
 
           flattened.push([
-            doc._id, // Course ID
-            doc.university_name, // University Name
-            doc.name, // Course Name
-            feeTypeLabel, // Fee Type
+            doc._id || "", // Course ID
+            doc.university_name || "", // University Name
+            doc.name || "", // Course Name
+            feeTypeLabel || "", // Fee Type
             doc.fee_name || "", // Fee Name
             feeTypeLabel == "Tuition Fee" || feeTypeLabel == "Other Fee"
               ? "P1"
@@ -322,11 +322,11 @@ module.exports = async function extractDetails(uniId, spreadsheetId, sheetname =
             "", // Period Location
             "", // Foreign Campus
             doc.local_fee_currency || "", // Local Fee Currency
-            doc.local_fee_amount, // Local Fee Amount
-            doc.local_fee_details.filter(Boolean).join("\n"), // Local Fee Description
+            doc.local_fee_amount || "", // Local Fee Amount
+            doc.local_fee_details.filter(Boolean).join("\n") || "", // Local Fee Description
             doc.international_fee_currency || "", // International Fee Currency
-            doc.intl_fee_amount, // International Fee Amount
-            doc.intl_fee_details.filter(Boolean).join("\n"), // International Fee Description
+            doc.intl_fee_amount || "", // International Fee Amount
+            doc.intl_fee_details.filter(Boolean).join("\n") || "", // International Fee Description
           ]);
         });
 

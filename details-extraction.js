@@ -160,9 +160,21 @@ module.exports = async function extractDetails(
                 duration: {
                   $first: {
                     $add: [
-                      { $ifNull: ["$data.partner_duration", 0] },
-                      { $ifNull: ["$data.local_year_fulltime", 0] },
-                    ],
+                      {
+                        $cond: [
+                          { $or: [ { $eq: ["$data.partner_duration", null] }, { $eq: ["$data.partner_duration", ""] } ] },
+                          0,
+                          "$data.partner_duration"
+                        ]
+                      },
+                      {
+                        $cond: [
+                          { $or: [ { $eq: ["$data.local_year_fulltime", null] }, { $eq: ["$data.local_year_fulltime", ""] } ] },
+                          0,
+                          "$data.local_year_fulltime"
+                        ]
+                      }
+                    ]
                   },
                 },
                 intakes: {
@@ -201,16 +213,16 @@ module.exports = async function extractDetails(
             : ""; // Convert why_apply to markdown format
 
           const row = [
-            doc._id, // Course ID
-            doc.name, // Name
-            doc.reference_url, // Reference URL
-            markedDownWhy_Apply, // Why Apply (HTML)
-            doc.course_level, // Course Level
-            doc.campus_name, // Campus (Default)
-            doc.duration, // Local Duration (Year) + Partner University Duration
-            doc.duration, // Local Duration (Year) + Partner University.Duration (duplicate?)
-            doc.intakes, // Intakes
-            doc.ptptn_type, // PTPTN Type
+            doc._id || "", // Course ID
+            doc.name || "", // Name
+            doc.reference_url || "", // Reference URL
+            markedDownWhy_Apply || "", // Why Apply (HTML)
+            doc.course_level || "", // Course Level
+            doc.campus_name || "", // Campus (Default)
+            doc.duration || "", // Local Duration (Year) + Partner University Duration
+            doc.duration || "", // Local Duration (Year) + Partner University.Duration (duplicate?)
+            doc.intakes || "", // Intakes
+            doc.ptptn_type || "", // PTPTN Type
           ];
 
           // English Exam Type & Requirement (1 to 9)

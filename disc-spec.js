@@ -129,7 +129,7 @@ module.exports = async function extractDetails(uniId, spreadsheetId, sheetname =
               flattened.push([
                 doc._id || "",
                 doc.name || "",
-                spec.name,
+                spec.name || "",
                 "Specialisation"
               ]);
             });

@@ -1,10 +1,12 @@
-// main func to extract data
 function extractData() {
   try {
+    var cloudFlareTunnelURI = "https://puzzle-tin-vegetables-typically.trycloudflare.com";
     var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Uni Details");
     var uniId = sheet.getRange("C4").getValue();
     var spreadsheetId = SpreadsheetApp.getActiveSpreadsheet().getId();
-    var apiUrl = "https://conscious-halifax-roman-pierre.trycloudflare.com/extract"
+    var apiUrl = 
+    cloudFlareTunnelURI 
+    + "/extract"
     + "?university_id=" + encodeURIComponent(uniId)
     + "&spreadsheet_id=" + encodeURIComponent(spreadsheetId);
     var response = UrlFetchApp.fetch(apiUrl);
@@ -16,7 +18,6 @@ function extractData() {
   }
 }
 
-// testing GAS connection 
 function triggerSendMessage() {
   Logger.log("Deploy connection successful");
 }
