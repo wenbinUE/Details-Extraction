@@ -174,7 +174,7 @@ module.exports = async function extractDetails(uniId, spreadsheetId, sheetname =
               doc.qualifications[i]?.requirement_summary || "",
               doc.qualifications[i]?.score_to_qualify || "",
               doc.qualifications[i]?.remarks || "",
-              markedDown_additional_requirement,
+              markedDown_additional_requirement || "",
             ]);
           }
         });

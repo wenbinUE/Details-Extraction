@@ -17,12 +17,12 @@ app.get('/extract', async (req, res) => {
   const courseFeeNonDegree = require('./course-fee-non-degree') // course-fee-non-degree.js
   const courseFeeDegree = require('./course-fee-degree') // course-fee-degree.js
   const courseFeePartnerships = require('./course-fee-partnerships') // course-fee-partner.js
-  await extractDetails(uniId, spreadsheetId);
-  await entryRequirement(uniId, spreadsheetId);
-  await discSpec(uniId, spreadsheetId);
+  // await extractDetails(uniId, spreadsheetId);
+  // await entryRequirement(uniId, spreadsheetId);
+  // await discSpec(uniId, spreadsheetId);
   // await courseFeeNonDegree(uniId, spreadsheetId);
   // await courseFeeDegree(uniId, spreadsheetId);
-  // await courseFeePartnerships(uniId, spreadsheetId);
+  await courseFeePartnerships(uniId, spreadsheetId);
 });
 
 const PORT = process.env.PORT || 3000;

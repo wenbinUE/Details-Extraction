@@ -258,20 +258,20 @@ module.exports = async function extractDetails(
           const feeTypeLabel = doc.feeTypeLabel;
 
           // Get numeric fee amounts for local and international
-          const localFeeAmountValue = Number(doc.local_fee_amount);
-          const intlFeeAmountValue = Number(doc.intl_fee_amount);
+          const localFeeAmountValue = Number(doc.local_fee_amount) || 0;
+          const intlFeeAmountValue = Number(doc.intl_fee_amount) || 0;
 
           // Find whether the period duration is full or non-full
-          const duration = Number(doc.period_duration);
+          const duration = Number(doc.period_duration) || 0;
           const isFullYear = Number.isInteger(duration) && duration > 0;
 
           if (isFullYear) {
             // If the period duration is full year (e.g. 3, 4)
             flattened.push([
-              doc._id, // Course ID
-              doc.university_name, // University Name
-              doc.name, // Course Name
-              feeTypeLabel, // Fee Type
+              doc._id || "", // Course ID
+              doc.university_name || "", // University Name
+              doc.name || "", // Course Name
+              feeTypeLabel || "", // Fee Type
               doc.fee_name || "", // Fee Name
               feeTypeLabel == "Tuition Fee" || feeTypeLabel == "Other Fee"
                 ? "P1"
@@ -294,12 +294,12 @@ module.exports = async function extractDetails(
               feeTypeLabel == "Tuition Fee" || feeTypeLabel == "Other Fee"
                 ? localFeeAmountValue / duration
                 : localFeeAmountValue, // Local Fee Amount (annual)
-              doc.local_fee_details.filter(Boolean).join("\n"), // Local Fee Description
+              doc.local_fee_details.filter(Boolean).join("\n") || "", // Local Fee Description
               doc.international_fee_currency || "", // International Fee Currency
               feeTypeLabel == "Tuition Fee" || feeTypeLabel == "Other Fee"
                 ? intlFeeAmountValue / duration
                 : intlFeeAmountValue, // International Fee Amount (annual)
-              doc.intl_fee_details.filter(Boolean).join("\n"), // International Fee Description
+              doc.intl_fee_details.filter(Boolean).join("\n") || "", // International Fee Description
             ]);
           } else if (!isFullYear) {
             // Else If the period duration is non-full year (e.g. 3.5, 4.3)
@@ -321,10 +321,10 @@ module.exports = async function extractDetails(
 
                 if (i < 3) {
                   flattened.push([
-                    doc._id, // Course ID
-                    doc.university_name, // University Name
-                    doc.name, // Course Name
-                    doc.feeTypeLabel, // Fee Type
+                    doc._id || "", // Course ID
+                    doc.university_name || "", // University Name
+                    doc.name || "", // Course Name
+                    doc.feeTypeLabel || "", // Fee Type
                     doc.fee_name || "", // Fee Name
                     i !== 2 ? "P" + i : "P" + roundedDownPeriodDuration, // Period Start
                     i !== 2 ? "P" + (i + 1) : "P" + roundedDownPeriodDuration, // Period End
@@ -335,10 +335,10 @@ module.exports = async function extractDetails(
                     "", // Foreign Campus
                     doc.local_fee_currency || "", // Local Fee Currency
                     i !== 2 ? annualFee : annualFeeForRemainder, // Local Fee Amount (annual)
-                    doc.local_fee_details.filter(Boolean).join("\n"), // Local Fee Description
+                    doc.local_fee_details.filter(Boolean).join("\n") || "", // Local Fee Description
                     doc.international_fee_currency || "", // International Fee Currency
                     i !== 2 ? annualIntlFee : annualIntlFeeForRemainder, // International Fee Amount (annual)
-                    doc.intl_fee_details.filter(Boolean).join("\n"), // International Fee Description
+                    doc.intl_fee_details.filter(Boolean).join("\n") || "", // International Fee Description
                   ]);
                 }
               }
@@ -349,10 +349,10 @@ module.exports = async function extractDetails(
               // for other fee types, just take the normal value
 
               flattened.push([
-                doc._id, // Course ID
-                doc.university_name, // University Name
-                doc.name, // Course Name
-                doc.feeTypeLabel, // Fee Type
+                doc._id || "", // Course ID
+                doc.university_name || "", // University Name
+                doc.name || "", // Course Name
+                doc.feeTypeLabel || "", // Fee Type
                 doc.fee_name || "", // Fee Name
                 "N/A", // Period Start
                 "N/A", // Period End
@@ -362,8 +362,8 @@ module.exports = async function extractDetails(
                 "", // Period Location
                 "", // Foreign Campus
                 doc.local_fee_currency || "", // Local Fee Currency
-                localFeeAmountValue, // Local Fee Amount (annual)
-                doc.local_fee_details.filter(Boolean).join("\n"), // Local Fee Description
+                localFeeAmountValue || 0, // Local Fee Amount (annual)
+                doc.local_fee_details.filter(Boolean).join("\n") || "", // Local Fee Description
                 doc.international_fee_currency || "", // International Fee Currency
                 intlFeeAmountValue || 0, // International Fee Amount (annual)
                 doc.intl_fee_details.filter(Boolean).join("\n"), // International Fee Description
