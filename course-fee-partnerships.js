@@ -364,7 +364,7 @@ module.exports = async function extractDetails(
               "0", // Period Duration
               "N/A", // Previous Node
               "N/A", // Next Node
-              "", // Period Location
+              "Home", // Period Location
               "", // Foreign Campus
               doc.local_fee_currency || "", // Local Fee Currency
               localFeeAmountValue || 0, // Local Fee Amount (annual)

@@ -300,7 +300,7 @@ module.exports = async function extractDetails(
               feeTypeLabel == "Tuition Fee" || feeTypeLabel == "Other Fee"
                 ? "FINAL"
                 : "N/A", // Next Node
-              "", // Period Location
+              "Home", // Period Location
               "", // Foreign Campus
               doc.local_fee_currency || "", // Local Fee Currency
               feeTypeLabel == "Tuition Fee" || feeTypeLabel == "Other Fee"
@@ -343,7 +343,7 @@ module.exports = async function extractDetails(
                     i !== 2 ? "1" : remainder, // Period Duration
                     i === 1 ? previousNode[0] : `P${i}`, // Previous Node
                     i !== 2 ? nextNode[1] : nextNode[0], // Next Node
-                    "", // Period Location
+                    "Home", // Period Location
                     "", // Foreign Campus
                     doc.local_fee_currency || "", // Local Fee Currency
                     i !== 2 ? annualFee : annualFeeForRemainder, // Local Fee Amount (annual)
@@ -371,7 +371,7 @@ module.exports = async function extractDetails(
                 "0", // Period Duration
                 "N/A", // Previous Node
                 "N/A", // Next Node
-                "", // Period Location
+                "Home", // Period Location
                 "", // Foreign Campus
                 doc.local_fee_currency || "", // Local Fee Currency
                 localFeeAmountValue || 0, // Local Fee Amount (annual)

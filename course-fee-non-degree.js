@@ -328,7 +328,7 @@ module.exports = async function extractDetails(
             feeTypeLabel == "Tuition Fee" || feeTypeLabel == "Other Fee"
               ? "FINAL"
               : "N/A", // Next Node
-            "", // Period Location
+            "Home", // Period Location
             "", // Foreign Campus
             doc.local_fee_currency || "", // Local Fee Currency
             doc.local_fee_amount || "", // Local Fee Amount
