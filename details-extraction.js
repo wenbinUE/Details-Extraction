@@ -162,19 +162,29 @@ module.exports = async function extractDetails(
                     $add: [
                       {
                         $cond: [
-                          { $or: [ { $eq: ["$data.partner_duration", null] }, { $eq: ["$data.partner_duration", ""] } ] },
+                          {
+                            $or: [
+                              { $eq: ["$data.partner_duration", null] },
+                              { $eq: ["$data.partner_duration", ""] },
+                            ],
+                          },
                           0,
-                          "$data.partner_duration"
-                        ]
+                          "$data.partner_duration",
+                        ],
                       },
                       {
                         $cond: [
-                          { $or: [ { $eq: ["$data.local_year_fulltime", null] }, { $eq: ["$data.local_year_fulltime", ""] } ] },
+                          {
+                            $or: [
+                              { $eq: ["$data.local_year_fulltime", null] },
+                              { $eq: ["$data.local_year_fulltime", ""] },
+                            ],
+                          },
                           0,
-                          "$data.local_year_fulltime"
-                        ]
-                      }
-                    ]
+                          "$data.local_year_fulltime",
+                        ],
+                      },
+                    ],
                   },
                 },
                 intakes: {
@@ -238,11 +248,21 @@ module.exports = async function extractDetails(
 
         // now send `flattened` to Google Sheets
         await sendToGoogleSheet(flattened, sheetname, spreadsheetId, auth);
-        await writeStatusToSheet(spreadsheetId, "Details-Extraction", "/ (DONE ALL)", auth); // "/" for success, "X" for fail
+        await writeStatusToSheet(
+          spreadsheetId,
+          "Details-Extraction",
+          "/ (DONE)",
+          auth
+        ); // "/" for success, "X" for fail
         await new Promise((resolve) => setTimeout(resolve, 2000));
       } catch (aggErr) {
         console.error("Aggregation error:", aggErr);
-        await writeStatusToSheet(spreadsheetId, "Details-Extraction", "X", auth);
+        await writeStatusToSheet(
+          spreadsheetId,
+          "Details-Extraction",
+          "X",
+          auth
+        );
       } finally {
         client.close();
       }
@@ -366,9 +386,7 @@ async function writeStatusToSheet(spreadsheetId, moduleName, status, auth) {
   } catch (e) {}
 
   // Always append only the status row (no header)
-  const values = [
-    [moduleName, status],
-  ];
+  const values = [[moduleName, status]];
 
   await sheets.spreadsheets.values.append({
     spreadsheetId,

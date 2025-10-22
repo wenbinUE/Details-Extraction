@@ -6,6 +6,10 @@ const path = require("path");
 const TurndownService = require("turndown");
 const turndownService = new TurndownService();
 require("dotenv").config();
+const {
+  sendToGoogleSheetZZ,
+  writeStatusToSheetZZ,
+} = require("./course-fee-google-extractions");
 
 const url = process.env.MONGO_URL; // mongoDB connection URL
 const dbName = process.env.DB_NAME; // database name
@@ -52,13 +56,21 @@ module.exports = async function extractDetails(
           .aggregate([
             { $match: { university_id: ObjectId(uniId) } }, // matched university
             { $match: { "data.publish": "on" } }, // only published courses
-            // { $match: { _id: ObjectId("5dc29b812c2c7312fb2fb472") } },
             {
               $match: {
                 "data.level_of_studies": ObjectId("5a1bbab02a2e3c29ecb9233b"),
               },
             }, // includes only degree courses
-
+            {
+              $match: {
+                $or: [
+                  { "data.partner_duration": 0 },
+                  { "data.partner_duration": "" },
+                  { "data.partner_duration": null },
+                  { "data.partner_duration": { $exists: false } },
+                ],
+              },
+            }, // excludes courses with partner duration
             // convert data.domesticstd_course_fees object to array
             {
               $addFields: {
@@ -398,12 +410,25 @@ module.exports = async function extractDetails(
         console.log(cleanedFlattended);
 
         // now send `flattened` to Google Sheets
-        await sendToGoogleSheet(cleanedFlattended, sheetname, spreadsheetId, auth);
-        await writeStatusToSheet(spreadsheetId, "Course-Fee-Degree", "/", auth); // "/" for success, "X" for fail
+        // await sendToGoogleSheet(cleanedFlattended, sheetname, spreadsheetId, auth);
+        // await writeStatusToSheet(spreadsheetId, "Course-Fee-Degree", "/", auth); // "/" for success, "X" for fail
+
+        await sendToGoogleSheetZZ(
+          cleanedFlattended,
+          spreadsheetId,
+          auth,
+          sheetname
+        );
+        await writeStatusToSheetZZ(
+          spreadsheetId,
+          "Course-Fee-Degree",
+          "/",
+          auth
+        );
         await new Promise((resolve) => setTimeout(resolve, 2000));
       } catch (aggErr) {
         console.error("Aggregation error:", aggErr);
-        await writeStatusToSheet(spreadsheetId, "Course-Fee-Degree", "X", auth);
+        await writeStatusToSheetZZ(spreadsheetId, "Course-Fee-Degree", "X", auth);
       } finally {
         client.close();
       }
@@ -517,7 +542,9 @@ async function writeStatusToSheet(spreadsheetId, moduleName, status, auth) {
 
   // Bold the headers
   const res = await sheets.spreadsheets.get({ spreadsheetId });
-  const statusSheet = res.data.sheets.find(s => s.properties.title === "Status");
+  const statusSheet = res.data.sheets.find(
+    (s) => s.properties.title === "Status"
+  );
   if (statusSheet) {
     await sheets.spreadsheets.batchUpdate({
       spreadsheetId,
