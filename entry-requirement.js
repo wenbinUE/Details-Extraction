@@ -91,6 +91,7 @@ module.exports = async function extractDetails(uniId, spreadsheetId, sheetname =
           .aggregate([
             { $match: { university_id: ObjectId(uniId) } }, // matched university
             { $match: { "data.publish": "on" } }, // only published courses
+            { $match: { deleted_at: { $exists: false } } }, // not deleted courses
 
             // open data dictionary, and then entry_requirement array
             { $unwind: { path: "$data", preserveNullAndEmptyArrays: true } },

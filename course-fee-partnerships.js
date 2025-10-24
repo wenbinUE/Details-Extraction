@@ -83,6 +83,7 @@ module.exports = async function extractDetails(
           .aggregate([
             { $match: { university_id: ObjectId(uniId) } }, // matched university
             { $match: { "data.publish": "on" } }, // only published courses
+            { $match: { deleted_at: { $exists: false } } }, // not deleted courses
             // { $match: { _id: ObjectId("5a3a7a1e2a2e3c51d02ccef8") } }, // matched courses (for production usage)
             {
               $match: {
